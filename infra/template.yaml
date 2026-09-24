@@ -2,15 +2,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: ADDA AI API with private, short-lived document evidence storage.
 Parameters:
-  AppEnv:
-    Type: String
-    Default: staging
-    AllowedValues: [development, staging, production]
-    Description: Runtime environment. production refuses the demo fixture unless AllowDemoFixture=true.
-  AllowDemoFixture:
-    Type: String
-    Default: 'false'
-    AllowedValues: ['true', 'false']
   FrontendOrigin:
     Type: String
     AllowedPattern: 'https://[^/]+|http://localhost:3000'
@@ -33,6 +24,26 @@ Parameters:
     Type: String
     Default: ''
     Description: Account-accessible Converse model or inference profile ID.
+  BedrockMaxTokens:
+    Type: Number
+    Default: 1500
+    MinValue: 1
+    MaxValue: 8000
+    Description: Hard cap on generated tokens per Coding request.
+  AlertEmail:
+    Type: String
+    Default: ''
+    Description: Email for budget and alarm notifications. Empty disables the budget, alarms and SNS topic.
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    Description: Monthly cost budget for this account (early development default). Alerts at 50, 80 and 100 percent actual and 100 percent forecast.
+  BedrockInvocationsPerHourAlarm:
+    Type: Number
+    Default: 300
+    MinValue: 1
+    Description: Alarm when Bedrock invocations in one hour exceed this count (unexpected usage or abuse).
   DemoAccessToken:
     Type: String
     NoEcho: true
@@ -46,6 +57,8 @@ Parameters:
     Description: Optional backend-only Search API key.
 Conditions:
   UseBedrock: !Equals [!Ref Provider, bedrock]
+  HasAlerts: !Not [!Equals [!Ref AlertEmail, '']]
+  BedrockAlerts: !And [!Condition UseBedrock, !Condition HasAlerts]
 Resources:
   HttpApi:
     Type: AWS::Serverless::HttpApi
@@ -68,6 +81,9 @@ Resources:
           ALLOW_DEMO_FIXTURE: !Ref AllowDemoFixture
           NEXUS_PROVIDER: !Ref Provider
           BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_MAX_TOKENS: !Ref BedrockMaxTokens
+          BEDROCK_TIMEOUT_SECONDS: '20'
+          BEDROCK_MAX_ATTEMPTS: '2'
           ALLOWED_ORIGINS: !Ref FrontendOrigin
           DEMO_ACCESS_TOKEN: !Ref DemoAccessToken
           TAVILY_API_KEY: !Ref TavilyApiKey
@@ -123,6 +139,100 @@ Resources:
             Status: Enabled
             Prefix: documents/
             ExpirationInDays: 1
+
+  # ---- Cost and health alerting (created only when AlertEmail is set) ----
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlerts
+    Properties:
+      TopicName: !Sub '${AWS::StackName}-alerts'
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlerts
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Condition: HasAlerts
+    Properties:
+      Budget:
+        BudgetName: !Sub '${AWS::StackName}-monthly'
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 50, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref AlertEmail}]
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref AlertEmail}]
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref AlertEmail}]
+        - Notification: {NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref AlertEmail}]
+  ApiErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlerts
+    Properties:
+      AlarmDescription: API Lambda reported 5 or more errors in 5 minutes.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{Name: FunctionName, Value: !Ref Api}]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+  ApiThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlerts
+    Properties:
+      AlarmDescription: API Lambda invocations were throttled.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions: [{Name: FunctionName, Value: !Ref Api}]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+  ApiDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlerts
+    Properties:
+      AlarmDescription: API p95 duration above 20 s for 10 minutes; requests are close to the 28 s limit.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions: [{Name: FunctionName, Value: !Ref Api}]
+      ExtendedStatistic: p95
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 20000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+  BedrockInvocationsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: BedrockAlerts
+    Properties:
+      AlarmDescription: Unexpectedly high Bedrock invocation volume for the configured model in one hour.
+      Namespace: AWS/Bedrock
+      MetricName: Invocations
+      Dimensions: [{Name: ModelId, Value: !Ref BedrockModelId}]
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: !Ref BedrockInvocationsPerHourAlarm
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
 Outputs:
   ApiUrl:
     Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
