@@ -20,7 +20,7 @@ The static Next.js frontend can be hosted on AWS Amplify Hosting. The FastAPI ba
 
 ## API
 
-Validate and deploy `infra/template.yaml` with SAM. The parameters are `FrontendOrigin` (the exact Amplify HTTPS origin), `Provider`, `BedrockModelId`, `DemoAccessToken`, and `TavilyApiKey`. Save the `ApiUrl` output. The template scopes the Lambda execution role to document objects under its private bucket and sets API Gateway route throttling.
+Validate and deploy `infra/template.yaml` with SAM. The parameters are `AppEnv` (`staging` default; `production` refuses the demo fixture unless `AllowDemoFixture=true` and requires an https origin), `FrontendOrigin` (the exact Amplify HTTPS origin), `Provider`, `BedrockModelId`, `DemoAccessToken`, and `TavilyApiKey`. Save the `ApiUrl` output. The template scopes the Lambda execution role to document objects under its private bucket, grants `bedrock:InvokeModel` only when `Provider=bedrock`, and sets API Gateway route throttling. After deploying, check `GET /ready` returns 200; it verifies bucket access and provider configuration without invoking a model.
 
 ```powershell
 sam validate --lint --template-file infra/template.yaml
