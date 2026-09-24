@@ -3,19 +3,42 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+AppEnv = Literal['development', 'staging', 'production']
+
+
+class ConfigurationError(RuntimeError):
+    """Raised at startup when settings are unsafe for the declared environment."""
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[1] / '.env', extra='ignore'
     )
+    app_env: AppEnv = 'development'
+    app_version: str = '0.2.0'
+    log_level: str = 'INFO'
+
     nexus_provider: Literal['demo', 'bedrock'] = 'demo'
+    # The demo fixture is a connection test, never an AI answer. Production refuses it
+    # unless this flag is set on purpose (for example a smoke-test stage).
+    allow_demo_fixture: bool = False
     aws_region: str = 'ap-south-1'
     bedrock_model_id: str = ''
+
     allowed_origins: str = 'http://localhost:3000,http://127.0.0.1:3000'
     demo_access_token: str = ''
     tavily_api_key: str = ''
     document_enabled: bool = True
     document_bucket: str = ''
+
+    # Per-client, per-process limits. Edge throttling (API Gateway / WAF) remains the
+    # authoritative control; this stops one client from exhausting one instance.
+    rate_limit_chat_per_minute: int = 20
+    rate_limit_upload_per_minute: int = 10
+    rate_limit_default_per_minute: int = 60
+    # Only trust X-Forwarded-For when a proxy you control sets it (ALB, nginx).
+    # API Gateway + Mangum already supply the real source IP in the ASGI scope.
+    trust_proxy_headers: bool = False
 
     @property
     def origins(self) -> list[str]:
@@ -24,3 +47,30 @@ class Settings(BaseSettings):
     @property
     def search_enabled(self) -> bool:
         return bool(self.tavily_api_key.strip())
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == 'production'
+
+    def validate_for_environment(self) -> list[str]:
+        """Return non-fatal warnings; raise ConfigurationError for unsafe production settings."""
+        warnings: list[str] = []
+        problems: list[str] = []
+        if self.nexus_provider == 'demo' and not self.allow_demo_fixture:
+            message = 'NEXUS_PROVIDER=demo returns a fixed fixture instead of AI output.'
+            (problems if self.is_production else warnings).append(
+                message + (' Set ALLOW_DEMO_FIXTURE=true to run a deliberate smoke stage.' if self.is_production else '')
+            )
+        if self.nexus_provider == 'bedrock' and not self.bedrock_model_id.strip():
+            problems.append('NEXUS_PROVIDER=bedrock requires BEDROCK_MODEL_ID.')
+        if self.app_env != 'development':
+            insecure = [o for o in self.origins if not o.startswith('https://')]
+            if insecure:
+                problems.append(f'ALLOWED_ORIGINS must be https in {self.app_env}: {", ".join(insecure)}')
+            if not self.origins:
+                problems.append('ALLOWED_ORIGINS is empty.')
+            if self.document_enabled and not self.document_bucket.strip():
+                warnings.append('Documents use process memory without DOCUMENT_BUCKET; uploads are lost on restart and not shared across instances.')
+        if problems:
+            raise ConfigurationError(' '.join(problems))
+        return warnings

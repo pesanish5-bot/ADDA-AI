@@ -1,57 +1,98 @@
-# NexusAI handoff
+# ADDA AI — project status
 
-## Current goal
-Finish the professional frontend for the hackathon. User will handle deployment separately.
+Updated 2026-09-24. Branch `feat/production-baseline` in `outputs/nexusai-mvp`
+(`outputs/nexusai` is a second worktree holding `main`; do not edit both at once).
 
-## Authoritative working copy
-Use `outputs/nexusai-mvp`, branch `codex/hackathon-mvp`. The active frontend on
-localhost:3000 and API on 127.0.0.1:8000 run this copy. Original `outputs/nexusai`
-has older code but still supplies the Python venv and backend environment to the
-startup script. Do not overwrite either checkout or run simultaneous frontend edits.
+## Current Production Stage
 
-## Current working state
-- Coding: working labelled fixture, real Bedrock inference unverified.
-- Documents: real PDF/TXT keyword retrieval, page citations, temporary token-protected uploads.
-- Research: plan, retrieve twice, assemble cited evidence; no model synthesis.
-- Search: Tavily key configured; current adapter requests a provider summary and sources.
-  Earlier Cursor notes report live Search success; this latest UI pass did not repeat paid calls.
-- AWS: named profile identity previously verified; no deployment or live Bedrock claim.
+**Prototype** (backend approaching alpha). Deploys and is public, but has no user
+identity, no durable data, and Coding still returns a labelled fixture in the cloud.
+Not production-ready. Definitions in `docs/ROADMAP.md`.
 
-## Completed this pass
-Audited both checkouts, running services, environment presence without showing secrets,
-Cursor's new startup script, Search summary behavior, frontend and demo notes.
-Replaced promotional dark UI with neutral light workspace, compact navigation,
-focused composer, result-first layout and a separate activity panel on desktop.
-Kept upload, citations, history, code highlighting/copy and existing API contracts.
-Removed external font request and decorative noise. Search badge says Enabled:
-configuration is not proof of a successful live request.
+## Working
 
-## Verified
-- Full backend suite: 71 passed (one existing dependency deprecation warning).
-- Final frontend typecheck and production build passed, including the result-first layout.
-- Browser: Coding fixture; sample PDF budget INR 180,000 cited page 2;
-  Research four-step workflow; mobile menu and history selection.
-- Desktop 1440px and mobile 390px checks, no horizontal overflow observed.
-- Browser error/warning log empty during this pass.
+- Routing: deterministic `select_agent` → Coding / Documents / Search / Research.
+- Documents: PDF/TXT upload with strict validation, keyword retrieval, page citations,
+  per-document token, in-memory or S3 store with expiry.
+- Search: Tavily adapter (bounded, URL-only citations) when a key is configured.
+- Research: plan → two lookups → extractive cited brief (no model synthesis).
+- Coding: fixture (`demo`) or Bedrock Converse (`bedrock`), errors fail closed.
+- Platform (new): `APP_ENV` guards, `X-Request-ID`, JSON access logs, per-client rate
+  limiting, safe 500s, `/ready`, security headers, docs hidden in production.
+- Frontend: static Next.js export on Amplify; session history, theme-aware brand, orb,
+  stop button, try-prompts, citation cards.
+- CI: ruff, pytest (3.13), pip-audit, typecheck, build, npm audit, sam validate.
 
-## Files changed in this pass
-`apps/web/app/page.tsx`, `apps/web/app/globals.css`, this file, `docs/STATUS.md`.
-Pre-edit frontend copies saved under workspace `work/frontend-before-refinement-*`.
-No backend, credentials, startup settings, or deployment resources changed.
-Combined older Cursor/Codex changes are still uncommitted; authorship cannot be
-reconstructed precisely from one shared dirty tree. Do not attribute all changes to one tool.
+## In Progress
 
-## Commands
-From MVP root: `../nexusai/.venv/Scripts/python.exe -m pytest services/api/tests -q`.
-From apps/web: `npm.cmd run typecheck`, `npm.cmd run build`.
-API: `../nexusai/.venv/Scripts/python.exe scripts/start_api.py`.
-Frontend: `npm.cmd run dev -- --hostname 127.0.0.1 --port 3000`.
+- Phase 1: verify live Bedrock inference from the deployed API; budget + alarms.
+- `feat/production-baseline` is pushed to GitHub; open/merge the PR into `main` and
+  retire `codex/hackathon-mvp`.
 
-## Remaining / exact next action
-Review current frontend with user, then checkpoint the combined repository safely.
-Resolve dependency lock drift before clean-machine setup: pypdf and multipart are
-used by the app but previous lock files need checking. Do not assume a clean install
-works merely because the shared venv passes tests.
-Bedrock test approval remains pending. Deployment is user-owned for now.
-Documents use process memory and are disabled in the Lambda template.
-Local work stops when the PC sleeps. No background/cloud execution is established.
+## Known Issues
+
+- Coding in the live demo is the fixture (`Provider=demo`). The conditional
+  `bedrock:InvokeModel` policy is deployed but inactive until `Provider=bedrock`.
+- Documents in memory are capped at 10 globally on the container path (set
+  `DOCUMENT_BUCKET` for anything shared).
+- Rate limiter is per process; Lambda instances do not share counts.
+- Local venv is Python 3.14 while CI/deploy use 3.13.
+- `docker compose` build/run unverified. Frontend has no eslint.
+- `/login`, `/register` are UI previews only.
+
+## Security Issues
+
+- Critical: no authentication; the public API can spend provider budget (mitigated by
+  edge throttle, per-client limiter, and paid providers being off). Fix: Phase 2 Cognito.
+- High: document access is token possession, not user ownership. Fix: Phase 2.
+- Medium: secrets as CloudFormation parameters → env vars. Fix: Phase 6 Secrets Manager.
+- Medium: no CSP on the static site. Fix: Phase 7.
+- Details and strengths: `docs/PRODUCTION_AUDIT.md`, `SECURITY.md`.
+
+## Infrastructure
+
+- Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
+  (last job 11). URL https://main.dvhyzvzxczywv.amplifyapp.com/
+- API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-24 12:50 IST),
+  HTTP API `pqrxb30pg5`, Lambda Python 3.13, private S3 documents bucket (1-day
+  lifecycle). Running commit `e47e634` with `AppEnv=staging`, `Provider=demo`,
+  `DemoAccessToken=""` (stack parameter now matches the public-demo Lambda config; the
+  earlier drift is resolved). Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
+  Deploy path: `python scripts/build_lambda_package.py` → `aws cloudformation package`
+  → `aws cloudformation deploy` (see OPERATIONS.md). No Docker or SAM CLI needed.
+- Live verification after deploy: `/health` → `environment: staging`, `version: 0.2.0`;
+  `/ready` → 200 with `document_bucket` ok; chat returns `X-Request-ID` and CORS headers
+  for the Amplify origin; 422 error carries `request_id`; sample PDF upload → cited
+  extractive answer → delete all 200; JSON access log lines present in CloudWatch.
+- Target architecture (ADRs 0001–0005): ECS Fargate, Postgres + pgvector, Cognito, SQS
+  worker. Nothing provisioned yet; all require approval (recurring cost).
+
+## Tests
+
+- Backend: `python -m pytest -q` in `services/api` → 89 passed (2026-09-24).
+- Lint: `ruff check .` clean. `pip-audit -r requirements.txt --strict`: no known
+  vulnerabilities.
+- Frontend: `npm run typecheck`, `npm run build` last passed on `d63429e` (no frontend
+  changes since). `npm audit` clean.
+- Not run this pass: SAM validate (CLI not installed locally; runs in CI), live cloud
+  smoke against the new template.
+
+## External Services
+
+- Amazon Bedrock: configured via `BEDROCK_MODEL_ID`; live inference **unverified**.
+- Tavily: key held in local `.env` and stack parameter; live Search verified earlier in
+  the hackathon phase, not re-run today.
+- AWS account: profile `nexusai`, region `ap-south-1`.
+
+## Latest Decisions
+
+- 2026-09-24: ADR-0001 ECS Fargate over Lambda (Phase 4); ADR-0002 Postgres + pgvector;
+  ADR-0003 Cognito; ADR-0004 pgvector hybrid retrieval; ADR-0005 SQS + worker for
+  research. Production refuses the demo fixture unless explicitly allowed. Git: `main`
+  protected, short-lived branches, squash merge, tags deploy.
+
+## Next Priority
+
+Phase 1: run `check_bedrock.py` with the `nexusai` profile, redeploy the SAM stack with
+`AppEnv=staging Provider=bedrock` (ask before enabling paid calls), confirm
+`provider=bedrock` end-to-end, then add an AWS Budget and CloudWatch alarms.

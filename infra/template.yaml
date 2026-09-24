@@ -2,14 +2,33 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: ADDA AI API with private, short-lived document evidence storage.
 Parameters:
+  AppEnv:
+    Type: String
+    Default: staging
+    AllowedValues: [development, staging, production]
+    Description: Runtime environment. production refuses the demo fixture unless AllowDemoFixture=true.
+  AllowDemoFixture:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
   FrontendOrigin:
     Type: String
     AllowedPattern: 'https://[^/]+|http://localhost:3000'
     Description: Exact frontend origin without trailing slash.
+  AppEnv:
+    Type: String
+    Default: staging
+    AllowedValues: [development, staging, production]
+    Description: Runtime environment label. production refuses the demo fixture unless AllowDemoFixture=true.
   Provider:
     Type: String
     Default: demo
     AllowedValues: [demo, bedrock]
+  AllowDemoFixture:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Permit the labelled fixture in production for a deliberate smoke stage only.
   BedrockModelId:
     Type: String
     Default: ''
@@ -17,13 +36,16 @@ Parameters:
   DemoAccessToken:
     Type: String
     NoEcho: true
-    MinLength: 24
-    Description: Shared demo gate entered by judges in UI. Never put in frontend build variables.
+    Default: ''
+    MinLength: 0
+    Description: Optional shared demo gate. Leave empty for a public hackathon demo. Never put in frontend build variables.
   TavilyApiKey:
     Type: String
     NoEcho: true
     Default: ''
     Description: Optional backend-only Search API key.
+Conditions:
+  UseBedrock: !Equals [!Ref Provider, bedrock]
 Resources:
   HttpApi:
     Type: AWS::Serverless::HttpApi
@@ -42,6 +64,8 @@ Resources:
       Timeout: 28
       Environment:
         Variables:
+          APP_ENV: !Ref AppEnv
+          ALLOW_DEMO_FIXTURE: !Ref AllowDemoFixture
           NEXUS_PROVIDER: !Ref Provider
           BEDROCK_MODEL_ID: !Ref BedrockModelId
           ALLOWED_ORIGINS: !Ref FrontendOrigin
@@ -54,6 +78,18 @@ Resources:
             - Effect: Allow
               Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
               Resource: !Sub '${DocumentsBucket.Arn}/documents/*'
+            - Effect: Allow
+              Action: [s3:ListBucket]
+              Resource: !GetAtt DocumentsBucket.Arn
+        - !If
+          - UseBedrock
+          - Statement:
+              - Effect: Allow
+                Action: [bedrock:InvokeModel]
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/*'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*'
+          - !Ref AWS::NoValue
       Events:
         Root:
           Type: HttpApi

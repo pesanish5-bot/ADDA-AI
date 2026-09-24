@@ -1,7 +1,7 @@
 import pytest
 
 from app.agents.document import DocumentStore
-from app.agents.research import plan_research, collect_research, render_research
+from app.agents.research import collect_research, plan_research, render_research
 from app.providers import ProviderError
 
 

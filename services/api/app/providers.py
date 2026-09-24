@@ -1,6 +1,12 @@
 import boto3
 from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ClientError, ReadTimeoutError, NoCredentialsError, PartialCredentialsError
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    NoCredentialsError,
+    PartialCredentialsError,
+    ReadTimeoutError,
+)
 
 from app.config import Settings
 

@@ -11,13 +11,21 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 | Documents | PDF/TXT upload, local keyword retrieval and page-cited excerpts | Local API tests and browser flow verified |
 | Research | LangGraph plan → two evidence checks → cited extractive brief | Attached-document workflow verified locally |
 | Search | Tavily adapter with bounded results, optional Tavily summary, and real source URLs | Live Search verified on the canonical local API when `TAVILY_API_KEY` is set |
-| AWS | SAM API/Lambda and Amplify configuration prepared | Not deployed; Docker/SAM path unverified |
+| AWS | Amplify frontend + API Gateway/Lambda (`adda-ai-demo`, `ap-south-1`) | Deployed and health-checked; Coding remains demo provider; Bedrock live inference still pending |
 
 The `/login/` and `/register/` pages are frontend previews. There is no account service or protected workspace yet; the forms do not send or save credentials.
 
 Documents and document Research work without an API key. They use real source text, **not embeddings or language-model synthesis**. Default Coding mode is `demo`: its answer is a fixed connection-test fixture, not generated code. Live provider errors never silently fall back to that fixture.
 
-[PROJECT_STATUS.md](PROJECT_STATUS.md) is the current handoff source of truth. See [verification scope](docs/STATUS.md), the [local demo guide](DEMO_GUIDE.md) and [pitch](PITCH.md).
+**Maturity: prototype.** It deploys and is public, but it has no user accounts, no durable data and no verified live model inference yet. [PROJECT_STATUS.md](PROJECT_STATUS.md) is the source of truth for stage, issues and next priority.
+
+Documentation set:
+
+- [PRODUCTION_AUDIT.md](docs/PRODUCTION_AUDIT.md) — findings, stub → production list, git workflow.
+- [ROADMAP.md](docs/ROADMAP.md) — Phases 0–10 with completion criteria and maturity definitions.
+- [ADRs](docs/adr/) — compute, database, authentication, vector store, async research.
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md), [DEVELOPMENT.md](DEVELOPMENT.md), [DEPLOYMENT.md](docs/DEPLOYMENT.md), [SECURITY.md](SECURITY.md), [OPERATIONS.md](OPERATIONS.md).
+- Hackathon-era notes: [docs/STATUS.md](docs/STATUS.md), [DEMO_GUIDE.md](DEMO_GUIDE.md), [PITCH.md](PITCH.md).
 
 ## Run locally
 
@@ -52,11 +60,11 @@ On macOS/Linux use `.venv/bin/python`, `cp` and `npm` equivalents. `docker compo
 
 ## Configuration and limits
 
-Backend `.env` controls `NEXUS_PROVIDER`, `DOCUMENT_ENABLED`, `AWS_REGION`, `BEDROCK_MODEL_ID`, `TAVILY_API_KEY`, `ALLOWED_ORIGINS` and optional local `DEMO_ACCESS_TOKEN`. The frontend only needs `NEXT_PUBLIC_API_BASE_URL`. Never put AWS/provider secrets in public frontend variables.
+Backend `.env` controls `APP_ENV`, `NEXUS_PROVIDER`, `ALLOW_DEMO_FIXTURE`, `DOCUMENT_ENABLED`, `DOCUMENT_BUCKET`, `AWS_REGION`, `BEDROCK_MODEL_ID`, `TAVILY_API_KEY`, `ALLOWED_ORIGINS`, rate-limit settings and optional local `DEMO_ACCESS_TOKEN`; see `services/api/.env.example`. `APP_ENV=production` refuses to start with the demo fixture or non-https origins. Every response carries `X-Request-ID`, and `GET /ready` reports dependency checks. The frontend only needs `NEXT_PUBLIC_API_BASE_URL`. Never put AWS/provider secrets in public frontend variables.
 
 Uploads accept PDF or UTF-8 TXT up to 5 MB, with PDFs capped at 30 pages. Extracted text and PDF decompression are additionally bounded. Documents live in one API process for up to one hour, at most ten documents, and disappear on restart. Each document requires its separate secret token for retrieval and deletion. There is no durable storage or multi-instance document support. Browser task history is memory-only; prompts are independent, not a conversation-memory system.
 
-The supplied Lambda template sets `DOCUMENT_ENABLED=false` because this document store is not safe across separate Lambda instances. A full cloud document demo needs shared durable storage first. S3/vector environment placeholders are unused. No vector database, embeddings, OCR or generated-code execution is implemented.
+The Lambda template stores documents in a private S3 bucket with one-day expiry so separate instances share them. No vector database, embeddings, OCR or generated-code execution is implemented; see the roadmap.
 
 ## Live services
 
@@ -68,6 +76,7 @@ Follow [AWS setup](docs/AWS_SETUP.md). AWS CLI is installed on the originating w
 
 ```powershell
 Push-Location services/api
+..\..\.venv\Scripts\python.exe -m ruff check .
 ..\..\.venv\Scripts\python.exe -m pytest -q
 Pop-Location
 Push-Location apps/web

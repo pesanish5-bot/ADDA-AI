@@ -4,11 +4,11 @@ Only extracted bounded text is stored, not the original uploaded PDF. S3 is
 shared across Lambda instances; the browser's separate document token is never
 stored in plaintext in the object.
 """
-from hashlib import sha256
 import json
 import re
 import secrets
 import time
+from hashlib import sha256
 
 import boto3
 from botocore.exceptions import ClientError

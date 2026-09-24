@@ -1,3 +1,29 @@
+## Demo polish pass (20 Sep 2026, ~20:45 IST)
+
+- Tagged TRY THIS prompts (skills.sh-style), Stop control while running, expected activity path while busy, numbered workflow chips, Clear session history.
+- Typecheck + build passed. Amplify job **9** SUCCEED.
+
+## History + auto-route check (20 Sep 2026, ~20:35 IST)
+
+- Root cause of history wipe: ADDA AI brand was `<a href="/">`, full reload cleared React-only session state.
+- Fix: brand now resets the composer without remounting; history persists in `sessionStorage` for the browser tab. Amplify job **8** SUCCEED.
+- Auto-route verified live: coding / search / research / document (no file) / budget-without-doc → search / greeting → search. Local `select_agent` regressions OK.
+
+## Fluid Orb polish (20 Sep 2026, ~20:27 IST)
+
+- Adapted Rare UI `fluid-orb` (WebGL) into `apps/web/components/ui/fluid-orb.tsx` + theme-aware `workspace-orb.tsx` without installing Tailwind/shadcn.
+- Placed orbs on empty hero, loading state, activity empty state, and login/register story panel.
+- Typecheck + production build passed. Amplify job **7** SUCCEED (POSIX zip). Live bundle includes WebGL orb code.
+- Frontend: https://main.dvhyzvzxczywv.amplifyapp.com/
+
+## AWS deployment verified (20 Sep 2026, ~19:30 IST)
+
+- Amplify app `ADDA-AI` (`dvhyzvzxczywv`), branch `main`, latest jobs SUCCEED (including packaging fix job 4; Fluid Orb job 7).
+- Frontend: https://main.dvhyzvzxczywv.amplifyapp.com/ (HTTP 200, CSS/JS serving after POSIX-zip redeploy).
+- API stack `adda-ai-demo` CREATE_COMPLETE; URL https://pqrxb30pg5.execute-api.ap-south-1.amazonaws.com.
+- `/health` returns provider `demo` with coding/document/search/research true. CORS allows the Amplify origin. Public demo needs no access token.
+- Still blocked for claims: live Bedrock inference.
+
 ## Professional workspace refinement — latest Codex pass
 
 - Audited Cursor changes in the active MVP copy before editing. Preserved the startup script, configured Search key, optional Tavily summary and all backend contracts.
@@ -41,8 +67,8 @@ Document behavior is lexical/extractive, without embeddings or AI synthesis. Res
 ## NEXT — externally unverified
 
 - Bedrock live inference: unverified. Do not copy credentials into documentation or infer model access from STS.
-- Docker build/run, AWS SAM validation/build, Lambda runtime and Amplify hosting: unverified. No deployment has occurred and no Git remote is configured.
-- Full cloud document support: not implemented. The Lambda template disables documents because the current store is process-local.
+- Docker/SAM build path for clean-machine reproduction remains lightly documented; the live stack already exists.
+- Full cloud document support: implemented via private S3 evidence storage with one-day expiry. Not embeddings/OCR.
 
 Work is isolated on `codex/hackathon-mvp` in `outputs/nexusai-mvp` while the coordinator preserves and consolidates the original repository's Cursor edits. Do not run simultaneous edits in both copies or assume consolidation is complete.
 
