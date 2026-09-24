@@ -26,12 +26,13 @@ Not production-ready. Definitions in `docs/ROADMAP.md`.
 ## In Progress
 
 - Phase 1: verify live Bedrock inference from the deployed API; budget + alarms.
-- Merge `feat/production-baseline` into `main` and retire `codex/hackathon-mvp`.
+- `feat/production-baseline` is pushed to GitHub; open/merge the PR into `main` and
+  retire `codex/hackathon-mvp`.
 
 ## Known Issues
 
-- Coding in the live demo is the fixture; the Lambda role only gained
-  `bedrock:InvokeModel` in `8261f88` and has not been redeployed.
+- Coding in the live demo is the fixture (`Provider=demo`). The conditional
+  `bedrock:InvokeModel` policy is deployed but inactive until `Provider=bedrock`.
 - Documents in memory are capped at 10 globally on the container path (set
   `DOCUMENT_BUCKET` for anything shared).
 - Rate limiter is per process; Lambda instances do not share counts.
@@ -52,10 +53,17 @@ Not production-ready. Definitions in `docs/ROADMAP.md`.
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
   (last job 11). URL https://main.dvhyzvzxczywv.amplifyapp.com/
-- API: SAM stack `adda-ai-demo`, HTTP API `pqrxb30pg5`, Lambda Python 3.13, private S3
-  documents bucket (1-day lifecycle). Deployed from `d63429e`-era template; the
-  `8261f88` template (AppEnv, AllowDemoFixture, conditional Bedrock policy) is **not yet
-  deployed**. Deploying it needs approval only if `Provider=bedrock` (paid calls).
+- API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-24 12:50 IST),
+  HTTP API `pqrxb30pg5`, Lambda Python 3.13, private S3 documents bucket (1-day
+  lifecycle). Running commit `e47e634` with `AppEnv=staging`, `Provider=demo`,
+  `DemoAccessToken=""` (stack parameter now matches the public-demo Lambda config; the
+  earlier drift is resolved). Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
+  Deploy path: `python scripts/build_lambda_package.py` → `aws cloudformation package`
+  → `aws cloudformation deploy` (see OPERATIONS.md). No Docker or SAM CLI needed.
+- Live verification after deploy: `/health` → `environment: staging`, `version: 0.2.0`;
+  `/ready` → 200 with `document_bucket` ok; chat returns `X-Request-ID` and CORS headers
+  for the Amplify origin; 422 error carries `request_id`; sample PDF upload → cited
+  extractive answer → delete all 200; JSON access log lines present in CloudWatch.
 - Target architecture (ADRs 0001–0005): ECS Fargate, Postgres + pgvector, Cognito, SQS
   worker. Nothing provisioned yet; all require approval (recurring cost).
 

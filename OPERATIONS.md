@@ -36,12 +36,29 @@ list unsafe-but-allowed settings.
 Not yet created (Phase 1). Planned: 5xx rate > 5% over 5 min, p95 duration > 20 s,
 Lambda throttles > 0, Bedrock invocation count per hour, AWS Budget on the account.
 
-## Deploy and rollback (current SAM/Amplify path)
+## Deploy and rollback (current CloudFormation/Amplify path)
 
-Deploy follows `docs/DEPLOYMENT.md`. Rollback:
+API deploy without Docker or SAM CLI (profile `nexusai`, region `ap-south-1`):
 
-- API: `sam deploy` with the previous commit checked out, or in CloudFormation choose the
-  stack → previous template. Parameters are unchanged unless stated in the release note.
+```powershell
+python scripts/build_lambda_package.py                     # build/lambda/api.zip
+# template copy with CodeUri: api.zip, written WITHOUT a UTF-8 BOM (PowerShell Set-Content adds one)
+aws cloudformation package --template-file build/lambda/template.yaml `
+  --s3-bucket adda-ai-artifacts-<account>-ap-south-1 --s3-prefix adda-ai-demo `
+  --output-template-file build/lambda/packaged.yaml
+aws cloudformation deploy --template-file build/lambda/packaged.yaml --stack-name adda-ai-demo `
+  --capabilities CAPABILITY_IAM --parameter-overrides file://params.json --no-fail-on-empty-changeset
+```
+
+Unlisted parameters keep their previous values. Always pass `DemoAccessToken` explicitly
+(currently empty for the public demo) so the stack never silently re-enables the gate.
+Then check `/health`, `/ready` and one chat call with `X-Request-ID`.
+
+Rollback:
+
+- API: redeploy the previous commit with the same steps, or in the CloudFormation
+  console pick the stack → Stack actions → roll back to the previous template.
+  Parameters are unchanged unless stated in the release note.
 - Frontend: Amplify console → the app → `main` → previous successful job → **Redeploy this
   version**. Manual zip deploys keep the last artifacts.
 
