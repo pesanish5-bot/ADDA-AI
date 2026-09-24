@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     document_enabled: bool = True
     document_bucket: str = ''
 
+    # Amazon Cognito
+    cognito_user_pool_id: str = ''
+    cognito_client_id: str = ''
+    cognito_region: str = ''
+    auth_profiles_table: str = ''
+    auth_dev_jwt_secret: str = ''
+    admin_emails: str = ''
+    auth_required: bool = True
+
     # Per-client, per-process limits. Edge throttling (API Gateway / WAF) remains the
     # authoritative control; this stops one client from exhausting one instance.
     rate_limit_chat_per_minute: int = 20
@@ -47,6 +56,26 @@ class Settings(BaseSettings):
     @property
     def search_enabled(self) -> bool:
         return bool(self.tavily_api_key.strip())
+
+    @property
+    def cognito_pool_region(self) -> str:
+        return (self.cognito_region or self.aws_region or 'ap-south-1').strip()
+
+    @property
+    def cognito_configured(self) -> bool:
+        return bool(self.cognito_user_pool_id.strip() and self.cognito_client_id.strip())
+
+    @property
+    def auth_configured(self) -> bool:
+        return self.cognito_configured or bool(self.auth_dev_jwt_secret.strip())
+
+    @property
+    def api_requires_auth(self) -> bool:
+        return bool(self.auth_required) and self.auth_configured
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {email.strip().lower() for email in self.admin_emails.split(',') if email.strip()}
 
     @property
     def is_production(self) -> bool:

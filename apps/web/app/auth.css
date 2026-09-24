@@ -55,11 +55,21 @@ html[data-theme="dark"] .auth-submit { color: #10251e; }
 .auth-switch a { color: var(--teal); text-decoration: none; font-weight: 650; }
 .auth-divider { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 10px; margin: 4px 0 17px; }
 .auth-divider::before, .auth-divider::after { content: ""; height: 1px; background: var(--line); flex: 1; }
-.auth-demo { display: flex; justify-content: center; align-items: center; gap: 9px; width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); text-decoration: none; font-size: 12px; font-weight: 600; }
-.auth-demo:hover { border-color: var(--teal); color: var(--teal); }
+.auth-google { display: flex; justify-content: center; align-items: center; gap: 10px; width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.auth-google:hover:not(:disabled) { border-color: var(--teal); }
+.auth-google:disabled { opacity: .55; cursor: not-allowed; }
+.auth-hint { margin: -6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.auth-forgot { margin: -4px 0 0; text-align: right; font-size: 12px; }
+.auth-forgot a { color: var(--teal); text-decoration: none; font-weight: 600; }
+.auth-forgot a:hover { text-decoration: underline; }
+.auth-message.ok { color: var(--teal); }
+.auth-link-btn { background: none; border: 0; color: var(--teal); font: inherit; font-weight: 650; cursor: pointer; padding: 0; }
+.auth-link-btn:disabled { opacity: .55; cursor: not-allowed; }
+.auth-loading { min-height: 100vh; display: grid; place-items: center; color: var(--muted); font-size: 14px; background: var(--bg); }
+.auth-back-spacer { flex: 1; }
 .auth-side-foot { color: var(--muted); font-size: 11px; text-align: center; margin: 0; }
-.page-footer a { color: var(--muted); text-decoration: none; }
-.page-footer a:hover { color: var(--teal); text-decoration: underline; }
+.page-footer a, .page-footer .footer-auth { color: var(--muted); text-decoration: none; background: none; border: 0; font: inherit; cursor: pointer; }
+.page-footer a:hover, .page-footer .footer-auth:hover { color: var(--teal); text-decoration: underline; }
 
 @media (max-width: 950px) {
   .auth-page { grid-template-columns: minmax(300px, .85fr) minmax(430px, 1.15fr); }
