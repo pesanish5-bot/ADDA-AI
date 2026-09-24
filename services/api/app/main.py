@@ -11,6 +11,9 @@ from mangum import Mangum
 
 from app.agents.document import MAX_BYTES, DocumentStore
 from app.agents.s3_document import S3DocumentStore
+from app.auth.routes import create_auth_router
+from app.auth.service import AuthService
+from app.auth.tokens import verify_bearer_token
 from app.body_limit import BodyLimit
 from app.config import Settings
 from app.graph import build_graph
@@ -30,7 +33,11 @@ def _error(request: Request, status: int, code: str, message: str) -> JSONRespon
     }})
 
 
-def create_app(settings: Settings | None = None, provider: CodingProvider | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    provider: CodingProvider | None = None,
+    auth_service: AuthService | None = None,
+) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
     for warning in settings.validate_for_environment():
@@ -38,6 +45,7 @@ def create_app(settings: Settings | None = None, provider: CodingProvider | None
 
     documents = S3DocumentStore(settings.document_bucket) if settings.document_bucket else DocumentStore()
     graph = build_graph(provider or CodingProvider(settings), documents)
+    auth = auth_service or AuthService(settings)
     app = FastAPI(title='ADDA AI API', version=settings.app_version,
                   docs_url=None if settings.is_production else '/docs',
                   redoc_url=None, openapi_url=None if settings.is_production else '/openapi.json')
@@ -46,7 +54,7 @@ def create_app(settings: Settings | None = None, provider: CodingProvider | None
     app.add_middleware(
         CORSMiddleware, allow_origins=settings.origins,
         allow_methods=['GET', 'POST', 'DELETE'],
-        allow_headers=['Content-Type', 'X-Demo-Token', 'X-Document-Token', 'X-Request-ID'],
+        allow_headers=['Content-Type', 'Authorization', 'X-Demo-Token', 'X-Document-Token', 'X-Request-ID'],
         expose_headers=['X-Request-ID', 'Retry-After'],
     )
     app.add_middleware(BodyLimit)
@@ -57,6 +65,7 @@ def create_app(settings: Settings | None = None, provider: CodingProvider | None
     )
     app.add_middleware(RateLimit, limiter=limiter, trust_proxy_headers=settings.trust_proxy_headers)
     app.add_middleware(RequestContext)
+    app.include_router(create_auth_router(settings, auth))
 
     @app.exception_handler(ProviderError)
     async def provider_error(request: Request, exc: ProviderError):
@@ -89,11 +98,26 @@ def create_app(settings: Settings | None = None, provider: CodingProvider | None
         response.headers['Cache-Control'] = 'no-store'
         return response
 
-    def authorize(x_demo_token: str | None = Header(default=None)):
+    def authorize(
+        x_demo_token: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
         if settings.demo_access_token and not secrets.compare_digest(
             (x_demo_token or '').encode(), settings.demo_access_token.encode()
         ):
             raise HTTPException(401, detail={'code': 'unauthorized', 'message': 'Enter the demo access token.'})
+        if settings.api_requires_auth:
+            scheme, _, token = (authorization or '').partition(' ')
+            if scheme.lower() != 'bearer' or not token:
+                raise HTTPException(401, detail={'code': 'unauthorized', 'message': 'Sign in required.'})
+            claims = verify_bearer_token(
+                token,
+                region=settings.cognito_pool_region,
+                user_pool_id=settings.cognito_user_pool_id,
+                client_id=settings.cognito_client_id,
+                dev_jwt_secret=settings.auth_dev_jwt_secret,
+            )
+            annotate(user_sub=str(claims.get('sub') or ''))
 
     @app.get('/health')
     def health():
@@ -101,6 +125,11 @@ def create_app(settings: Settings | None = None, provider: CodingProvider | None
         return {'status': 'ok', 'environment': settings.app_env, 'version': settings.app_version,
                 'provider': settings.nexus_provider,
                 'model': settings.bedrock_model_id if settings.nexus_provider == 'bedrock' else None,
+                'auth': {
+                    'configured': settings.auth_configured,
+                    'provider': 'cognito' if settings.cognito_configured else ('dev' if settings.auth_dev_jwt_secret else 'none'),
+                    'required': settings.api_requires_auth,
+                },
                 'capabilities': {'coding': True, 'document': settings.document_enabled,
                                  'search': settings.search_enabled, 'research': settings.document_enabled or settings.search_enabled},
                 'limits': {'upload_bytes': MAX_BYTES, 'document_pages': 30, 'document_ttl_seconds': 3600},

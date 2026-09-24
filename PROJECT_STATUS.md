@@ -1,29 +1,20 @@
-# ADDA AI — project status
+# ADDA AI project status
 
-Updated 2026-09-24. Branch `feat/production-baseline` in `outputs/nexusai-mvp`
-(`outputs/nexusai` is a second worktree holding `main`; do not edit both at once).
+**ADDA AI**. Live site: https://main.dvhyzvzxczywv.amplifyapp.com/
 
-## Current Production Stage
+## Current focus
 
-**Prototype** (backend approaching alpha). Deploys and is public, but has no user
-identity, no durable data, and Coding still returns a labelled fixture in the cloud.
-Not production-ready. Definitions in `docs/ROADMAP.md`.
+Production Cognito authentication on branch `feat/production-auth`, preserving the deployed workspace UI.
 
-## Working
+## Auth
 
-- Routing: deterministic `select_agent` → Coding / Documents / Search / Research.
-- Documents: PDF/TXT upload with strict validation, keyword retrieval, page citations,
-  per-document token, in-memory or S3 store with expiry.
-- Search: Tavily adapter (bounded, URL-only citations) when a key is configured.
-- Research: plan → two lookups → extractive cited brief (no model synthesis).
-- Coding: fixture (`demo`) or Bedrock Converse (`bedrock`), errors fail closed.
-- Platform (new): `APP_ENV` guards, `X-Request-ID`, JSON access logs, per-client rate
-  limiting, safe 500s, `/ready`, security headers, docs hidden in production.
-- Frontend: static Next.js export on Amplify; session history, theme-aware brand, orb,
-  stop button, try-prompts, citation cards.
-- CI: ruff, pytest (3.13), pip-audit, typecheck, build, npm audit, sam validate.
+- Email register → `/verify-email` → login
+- Google via Cognito Hosted UI (needs `NEXT_PUBLIC_COGNITO_DOMAIN` + IdP)
+- Forgot password → `/forgot-password`
+- Workspace gated by `AuthGate`; API gated by Cognito JWT when `AUTH_REQUIRED=true`
+- Registered users: Cognito Users console is source of truth
 
-## In Progress
+## UI parity
 
 - Phase 1 (branch `feat/bedrock-coding`, on top of `feat/production-baseline`):
   provider hardened (token cap, timeout, bounded retry, truncation flag, usage metadata
@@ -105,5 +96,5 @@ with `global.anthropic.claude-haiku-4-5-20251001-v1:0`; (2) deploy `Provider=bed
 with `AlertEmail` + `MonthlyBudgetUsd` so the budget and alarms exist before public
 traffic reaches the model; (3) run the verification matrix through the deployed app
 (normal request, code explanation, debug request, larger request, failure path, fixture
-guard) and record results here. Then Phase 2 (Cognito + Postgres) on
-`feat/auth-persistence`.
+guard) and record results here. Production authentication is being integrated on
+`codex/auth-bedrock-integration`; the BrandMark/fluid-orb workspace is preserved.

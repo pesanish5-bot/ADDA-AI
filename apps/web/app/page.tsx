@@ -5,6 +5,8 @@ import hljs from "highlight.js/lib/common";
 import ThemePicker from "../components/theme-picker";
 import WorkspaceOrb from "../components/ui/workspace-orb";
 import BrandMark from "../components/brand-mark";
+import AuthGate from "../components/AuthGate";
+import { useAuth } from "../components/AuthProvider";
 import { ApiError, getHealth, sendChat, uploadDocument, loadDemoDocument, deleteDocument, type Agent, type ChatResponse, type Health, type DocumentRef, type Provider } from "../lib/api";
 
 const specialists = [
@@ -86,12 +88,16 @@ function SourceCard({ item, index, fallback }: { item: ChatResponse["citations"]
     {item.excerpt && <details className="source-excerpt"><summary>View source excerpt</summary><blockquote>{item.excerpt}</blockquote></details>}
   </li>;
 }
-export default function Workspace() {
+export default function WorkspacePage() {
+  return <AuthGate><Workspace /></AuthGate>;
+}
+
+function Workspace() {
+  const { user, signOut } = useAuth();
   const [health, setHealth] = useState<Health | null>(null);
   const [connection, setConnection] = useState("Connecting");
   const [message, setMessage] = useState("");
   const [agent, setAgent] = useState<Agent>("auto");
-  const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -102,21 +108,21 @@ export default function Workspace() {
   const [submitted, setSubmitted] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [tokenOpen, setTokenOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const tokenInput = useRef<HTMLInputElement>(null);
   const runAbort = useRef<AbortController | null>(null);
   const historyReady = useRef(false);
   const result = selected?.response;
   const locked = busy || uploading;
+  const displayName = user?.name || user?.email || "Account";
   const ready = (id: Exclude<Agent, "auto">) => {
     if (id === "research") return Boolean(health?.capabilities.search) || Boolean(document && health?.capabilities.document);
     return Boolean(health?.capabilities[id]);
   };
   async function checkConnection() { setConnection("Connecting"); try { setHealth(await getHealth()); setConnection("Workspace connected"); } catch { setHealth(null); setConnection("Workspace offline"); } }
-  function revealToken(focus = true) {
-    setTokenOpen(true);
-    if (focus) queueMicrotask(() => tokenInput.current?.focus());
+  async function handleSignOut() {
+    await signOut();
+    window.location.replace("/login/");
   }
   useEffect(() => {
     const restored = loadHistory();
@@ -168,7 +174,7 @@ export default function Workspace() {
     if (locked || !document) return;
     setUploading(true); setUploadError("");
     try {
-      await deleteDocument(document, token); setDocument(null);
+      await deleteDocument(document); setDocument(null);
       if (agent === "document" || agent === "research") setAgent("auto");
     } catch (failure) {
       setUploadError(`The document is still attached because cleanup failed. Try removing it again. ${failure instanceof Error ? failure.message : ""}`);
@@ -180,15 +186,18 @@ export default function Workspace() {
     try {
       if (file && !/\.(pdf|txt)$/i.test(file.name)) throw new Error("Choose a text-based PDF or a UTF-8 TXT file.");
       if (file && file.size > 5 * 1024 * 1024) throw new Error("Choose a file smaller than 5 MB.");
-      const doc = file ? await uploadDocument(file, token) : await loadDemoDocument(token);
+      const doc = file ? await uploadDocument(file) : await loadDemoDocument();
       const previous = document;
       setDocument(doc); setAgent("auto"); setMessage("Summarize this document and cite the supporting pages."); setSelected(null); setError("");
       if (previous) {
-        try { await deleteDocument(previous, token); }
+        try { await deleteDocument(previous); }
         catch { setUploadError("Your new document is ready, but the previous document could not be removed from the API. It will expire automatically within one hour."); }
       }
     } catch (failure) {
-      if (failure instanceof ApiError && failure.status === 401) revealToken();
+      if (failure instanceof ApiError && failure.status === 401) {
+        window.location.replace("/login/");
+        return;
+      }
       setUploadError(failure instanceof Error ? failure.message : "The document could not be uploaded.");
     }
     finally { setUploading(false); if (fileInput.current) fileInput.current.value = ""; }
@@ -210,14 +219,17 @@ export default function Workspace() {
     runAbort.current = controller;
     setBusy(true); setError(""); setSelected(null); setSubmitted(message.trim()); setMenuOpen(false);
     try {
-      const response = await sendChat(message.trim(), agent, token, document, controller.signal);
+      const response = await sendChat(message.trim(), agent, document, controller.signal);
       if (controller.signal.aborted) return;
       const task = { prompt: message.trim(), response };
       setSelected(task);
       setHistory((items) => [task, ...items].slice(0, 20));
     } catch (failure) {
       if (controller.signal.aborted) return;
-      if (failure instanceof ApiError && failure.status === 401) revealToken();
+      if (failure instanceof ApiError && failure.status === 401) {
+        window.location.replace("/login/");
+        return;
+      }
       setError(failure instanceof Error ? failure.message : "Something went wrong. Please try again.");
     } finally {
       if (runAbort.current === controller) {
@@ -262,7 +274,17 @@ export default function Workspace() {
           </button>) : <p className="history-empty">Completed tasks stay in this browser tab.</p>}
         </section>
       </div>
-      <div className="sidebar-bottom"><BrandMark className="session-avatar" title="ADDA AI" /><div><strong>Personal workspace</strong><p>Saved in this browser tab</p></div></div>
+      <div className="sidebar-bottom account-panel">
+        <button type="button" className="account-trigger" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>
+          <span className="session-avatar account-initial" aria-hidden="true">{(displayName[0] || "A").toUpperCase()}</span>
+          <span className="account-copy"><strong>{displayName}</strong><small>{user?.email || "Signed in"}</small></span>
+        </button>
+        {accountOpen && (
+          <div className="account-menu" role="menu">
+            <button type="button" role="menuitem" onClick={() => void handleSignOut()}>Sign out</button>
+          </div>
+        )}
+      </div>
     </aside>
     <main>
       <header className="topbar">
@@ -314,7 +336,6 @@ export default function Workspace() {
             <p className="attachment-help">PDF or TXT, up to 5 MB. Document access expires after one hour.</p>
             <div className="provider-note" role="status">{providerTitle}</div>
             {uploadError && <div className="error-box" role="alert"><strong>Document notice</strong><p>{uploadError}</p></div>}
-            <details className="access-settings" open={tokenOpen} onToggle={(event) => setTokenOpen((event.target as HTMLDetailsElement).open)}><summary>Workspace access token</summary><label htmlFor="token">Only if this demo API is protected</label><input id="token" ref={tokenInput} type="password" autoComplete="off" value={token} disabled={locked} onChange={(event) => setToken(event.target.value)} placeholder="Enter the demo access token" /><small>Kept only in this tab’s memory. The public hosted demo does not need a token.</small></details>
             {busy && <div className="loading-box" role="status"><WorkspaceOrb size={56} className="loading-orb" /><div className="loading-copy"><strong>Running {routeHint}</strong><p>{submitted}</p><p>Completed steps appear when the API returns. Nothing is simulated.</p><button type="button" className="stop-button" onClick={stopTask}>Stop</button></div></div>}
             {error && <div className="error-box" role="alert"><strong>We couldn’t complete this task</strong><p>{error}</p><button type="button" disabled={locked} onClick={() => void run()}>Try again ↗</button></div>}
             {result && <article className={`result-card agent-${result.agent}`}>
@@ -333,7 +354,7 @@ export default function Workspace() {
             <div className="trace-note">{result ? labels[result.provider] : busy ? <button type="button" className="stop-button" onClick={stopTask}>Stop task</button> : "Waiting for the response"}</div>
           </aside>}
         </div>
-        <footer className="page-footer"><span>Each task is independent. History stays in this tab.</span><a href="/login/">Account preview</a></footer>
+        <footer className="page-footer"><span>Each task is independent. History stays in this tab.</span><button type="button" className="footer-auth" onClick={() => void handleSignOut()}>Sign out</button></footer>
       </div>
     </main>
   </div>;
