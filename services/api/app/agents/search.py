@@ -1,5 +1,5 @@
-from urllib.parse import urlparse
 import re
+from urllib.parse import urlparse
 
 import httpx
 
@@ -57,7 +57,7 @@ def _answer(query: str, payload: dict, citations: list[dict], snippets: list[str
             'Retrieved snippets; full pages have not been independently verified.',
             '',
         ])
-    for citation, snippet in zip(citations, snippets):
+    for citation, snippet in zip(citations, snippets, strict=True):
         detail = f" — {escape(snippet)}" if snippet else ''
         lines.append(f"- [{citation['id']}] {escape(citation['title'])}{detail}")
     lines.append('')

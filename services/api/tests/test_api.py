@@ -131,7 +131,8 @@ def test_health_does_not_invoke_model(monkeypatch):
         raise AssertionError('Health must not call AWS')
 
     monkeypatch.setattr('app.providers.boto3.client', forbidden)
-    client = TestClient(create_app(Settings(_env_file=None, nexus_provider='bedrock')))
+    client = TestClient(create_app(Settings(_env_file=None, nexus_provider='bedrock',
+                                            bedrock_model_id='anthropic.test-model')))
     result = client.get('/health')
     assert result.status_code == 200
     assert result.json()['provider'] == 'bedrock'

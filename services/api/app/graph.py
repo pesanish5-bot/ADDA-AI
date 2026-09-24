@@ -4,9 +4,9 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app.agents.search import MAX_RESULTS, SearchProvider
 from app.agents.document import DocumentStore
-from app.agents.research import plan_research, collect_research, render_research
+from app.agents.research import collect_research, plan_research, render_research
+from app.agents.search import MAX_RESULTS, SearchProvider
 from app.providers import CodingProvider, ProviderError
 
 

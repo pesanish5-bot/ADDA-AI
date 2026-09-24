@@ -3,14 +3,14 @@
 Documents expire after one hour and disappear on restart. A separate bearer token
 is required for every lookup; possession of a document id alone grants no access.
 """
-from collections import Counter
-from dataclasses import dataclass
-from io import BytesIO
 import math
 import re
 import secrets
 import threading
 import time
+from collections import Counter
+from dataclasses import dataclass
+from io import BytesIO
 
 from pypdf import PdfReader, apply_configuration
 from pypdf.errors import LimitReachedError

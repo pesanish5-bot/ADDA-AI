@@ -2,8 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.main import create_app
 from app.graph import select_agent
+from app.main import create_app
 
 
 @pytest.fixture
