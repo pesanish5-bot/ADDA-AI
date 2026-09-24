@@ -35,6 +35,18 @@ class Citation(BaseModel):
     excerpt: str | None = None
 
 
+class Usage(BaseModel):
+    """Model usage metadata for metering; absent for non-model providers."""
+    provider: str
+    model: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    latency_ms: int
+    stop_reason: str | None = None
+    truncated: bool = False
+    attempts: int = 1
+
+
 class ChatResponse(BaseModel):
     request_id: str
     agent: str
@@ -42,3 +54,4 @@ class ChatResponse(BaseModel):
     provider: Literal['demo', 'bedrock', 'extractive', 'tavily']
     activity: list[Activity]
     citations: list[Citation] = Field(default_factory=list)
+    usage: Usage | None = None

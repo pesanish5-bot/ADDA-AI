@@ -58,6 +58,7 @@ def test_unhandled_exception_returns_json_without_internals():
     response = client.post('/api/chat', json={'message': 'Write a Python function'})
     assert response.status_code == 500
     assert response.json()['detail']['code'] == 'internal_error'
+    assert response.json()['detail']['request_id'] == response.headers['x-request-id']
     assert 'hunter2' not in response.text
     assert 'RuntimeError' not in response.text
 

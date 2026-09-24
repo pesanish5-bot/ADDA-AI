@@ -6,6 +6,7 @@ export type ChatResponse = {
   request_id: string; agent: string; answer: string; provider: Provider;
   activity: { step: string; status: "completed"; detail: string; duration_ms: number }[];
   citations: { id?: string; title?: string; url?: string; page?: number; excerpt?: string }[];
+  usage?: { provider: string; model: string; input_tokens?: number | null; output_tokens?: number | null; latency_ms: number; stop_reason?: string | null; truncated?: boolean; attempts?: number } | null;
 };
 const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 export class ApiError extends Error { constructor(message: string, public status: number) { super(message); this.name = "ApiError"; } }

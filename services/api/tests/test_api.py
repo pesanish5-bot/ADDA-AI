@@ -85,7 +85,7 @@ def test_bedrock_payload_and_answer(monkeypatch):
         def converse(self, **kwargs):
             assert kwargs['modelId'] == 'test-model'
             assert kwargs['messages'][0]['content'][0]['text'] == 'Write code'
-            assert kwargs['inferenceConfig']['maxTokens'] == 1200
+            assert kwargs['inferenceConfig']['maxTokens'] == 1500  # Settings.bedrock_max_tokens default
             return {'output': {'message': {'content': [{'text': 'Generated answer'}]}}}
 
     monkeypatch.setattr('app.providers.boto3.client', lambda *a, **kw: FakeBedrock())

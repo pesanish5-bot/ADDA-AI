@@ -23,7 +23,14 @@ class Settings(BaseSettings):
     # unless this flag is set on purpose (for example a smoke-test stage).
     allow_demo_fixture: bool = False
     aws_region: str = 'ap-south-1'
+    # Converse model or inference profile id, e.g. global.anthropic.claude-haiku-4-5-20251001-v1:0
     bedrock_model_id: str = ''
+    # Hard cap on generated tokens per request; callers may ask for less, never more.
+    bedrock_max_tokens: int = 1500
+    # Read timeout per attempt. Lambda has 28 s total; leave room for cold start and retry.
+    bedrock_timeout_seconds: int = 20
+    # Attempts including the first; only throttling / transient service errors are retried.
+    bedrock_max_attempts: int = 2
 
     allowed_origins: str = 'http://localhost:3000,http://127.0.0.1:3000'
     demo_access_token: str = ''
@@ -63,6 +70,12 @@ class Settings(BaseSettings):
             )
         if self.nexus_provider == 'bedrock' and not self.bedrock_model_id.strip():
             problems.append('NEXUS_PROVIDER=bedrock requires BEDROCK_MODEL_ID.')
+        if not 1 <= self.bedrock_max_tokens <= 8000:
+            problems.append('BEDROCK_MAX_TOKENS must be between 1 and 8000.')
+        if not 1 <= self.bedrock_timeout_seconds <= 25:
+            problems.append('BEDROCK_TIMEOUT_SECONDS must be between 1 and 25 to fit the API time budget.')
+        if not 1 <= self.bedrock_max_attempts <= 3:
+            problems.append('BEDROCK_MAX_ATTEMPTS must be between 1 and 3.')
         if self.app_env != 'development':
             insecure = [o for o in self.origins if not o.startswith('https://')]
             if insecure:

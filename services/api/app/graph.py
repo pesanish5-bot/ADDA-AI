@@ -22,6 +22,7 @@ class AgentState(TypedDict):
     provider: str
     plan: list[str]
     collection: dict
+    usage: dict | None
 
 
 def select_agent(message: str, requested_agent: str, document_id: str | None = None) -> tuple[str, str]:
@@ -86,12 +87,21 @@ def build_graph(provider: CodingProvider, documents: DocumentStore | None = None
 
     def coding(state: AgentState):
         started = perf_counter()
-        answer = provider.generate(state['message'])
-        mode = 'Offline fixed fixture returned; no AI call.' if provider.settings.nexus_provider == 'demo' else 'Bedrock Converse returned an answer; code was not executed.'
-        return {'answer': answer, 'provider': provider.settings.nexus_provider, 'activity': state['activity'] + [{
-            'step': 'Coding agent', 'status': 'completed', 'detail': mode,
-            'duration_ms': round((perf_counter() - started) * 1000),
-        }]}
+        generation = provider.generate(state['message'])
+        if generation.provider == 'demo':
+            mode = 'Offline fixed fixture returned; no AI call.'
+        else:
+            tokens = ''
+            if generation.input_tokens is not None and generation.output_tokens is not None:
+                tokens = f' ({generation.input_tokens} in / {generation.output_tokens} out tokens)'
+            mode = f'Bedrock Converse answered with {generation.model}{tokens}; code was not executed.'
+            if generation.truncated:
+                mode += ' Output hit the token limit.'
+        return {'answer': generation.text, 'provider': generation.provider, 'usage': generation.usage(),
+                'activity': state['activity'] + [{
+                    'step': 'Coding agent', 'status': 'completed', 'detail': mode,
+                    'duration_ms': round((perf_counter() - started) * 1000),
+                }]}
 
     def search(state: AgentState):
         started = perf_counter()

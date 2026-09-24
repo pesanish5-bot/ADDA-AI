@@ -20,9 +20,13 @@ from app.ratelimit import RateLimit, RateLimiter
 from app.schemas import ChatRequest, ChatResponse
 
 
-def _error(status: int, code: str, message: str) -> JSONResponse:
+def _request_id(request: Request) -> str:
+    return current_request_id() or getattr(request.state, 'request_id', '')
+
+
+def _error(request: Request, status: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(status_code=status, content={'detail': {
-        'code': code, 'message': message, 'request_id': current_request_id(),
+        'code': code, 'message': message, 'request_id': _request_id(request),
     }})
 
 
@@ -55,28 +59,35 @@ def create_app(settings: Settings | None = None, provider: CodingProvider | None
     app.add_middleware(RequestContext)
 
     @app.exception_handler(ProviderError)
-    async def provider_error(_request: Request, exc: ProviderError):
+    async def provider_error(request: Request, exc: ProviderError):
         annotate(error_code=exc.code)
-        return _error(exc.status, exc.code, exc.message)
+        return _error(request, exc.status, exc.code, exc.message)
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(_request: Request, _exc: RequestValidationError):
+    async def validation_error(request: Request, _exc: RequestValidationError):
         annotate(error_code='invalid_request')
-        return _error(422, 'invalid_request',
+        return _error(request, 422, 'invalid_request',
                       'Send a nonblank message of at most 12,000 characters and a supported agent.')
 
     @app.exception_handler(HTTPException)
-    async def http_error(_request: Request, exc: HTTPException):
+    async def http_error(request: Request, exc: HTTPException):
         detail = exc.detail if isinstance(exc.detail, dict) else {'code': 'http_error', 'message': str(exc.detail)}
         annotate(error_code=detail.get('code'))
-        return _error(exc.status_code, detail.get('code', 'http_error'), detail.get('message', 'Request failed.'))
+        return _error(request, exc.status_code, detail.get('code', 'http_error'), detail.get('message', 'Request failed.'))
 
     @app.exception_handler(Exception)
-    async def unhandled_error(_request: Request, exc: Exception):
+    async def unhandled_error(request: Request, exc: Exception):
         # Log the class and request id for operators; never return internals to clients.
         annotate(error_code='internal_error')
-        log_event('unhandled exception', logging.ERROR, exception=type(exc).__name__)
-        return _error(500, 'internal_error', 'Something went wrong on our side. Retry with the request ID if it persists.')
+        log_event('unhandled exception', logging.ERROR, exception=type(exc).__name__,
+                  request_id=_request_id(request))
+        response = _error(request, 500, 'internal_error',
+                          'Something went wrong on our side. Retry with the request ID if it persists.')
+        # This response bypasses RequestContext (Starlette's error middleware is outermost).
+        response.headers['X-Request-ID'] = _request_id(request)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     def authorize(x_demo_token: str | None = Header(default=None)):
         if settings.demo_access_token and not secrets.compare_digest(
@@ -89,6 +100,7 @@ def create_app(settings: Settings | None = None, provider: CodingProvider | None
         """Liveness: the process is up and configured. Makes no network calls."""
         return {'status': 'ok', 'environment': settings.app_env, 'version': settings.app_version,
                 'provider': settings.nexus_provider,
+                'model': settings.bedrock_model_id if settings.nexus_provider == 'bedrock' else None,
                 'capabilities': {'coding': True, 'document': settings.document_enabled,
                                  'search': settings.search_enabled, 'research': settings.document_enabled or settings.search_enabled},
                 'limits': {'upload_bytes': MAX_BYTES, 'document_pages': 30, 'document_ttl_seconds': 3600},
@@ -147,11 +159,16 @@ def create_app(settings: Settings | None = None, provider: CodingProvider | None
         state = graph.invoke({'message': body.message, 'requested_agent': body.agent,
                               'agent': '', 'answer': '', 'activity': [], 'citations': [],
                               'document_id': body.document_id, 'document_token': x_document_token,
-                              'provider': settings.nexus_provider, 'plan': [], 'collection': {}})
+                              'provider': settings.nexus_provider, 'plan': [], 'collection': {}, 'usage': None})
+        usage = state.get('usage')
         annotate(agent=state['agent'], provider=state['provider'])
+        if usage:
+            annotate(model=usage.get('model'), input_tokens=usage.get('input_tokens'),
+                     output_tokens=usage.get('output_tokens'), provider_latency_ms=usage.get('latency_ms'),
+                     stop_reason=usage.get('stop_reason'), attempts=usage.get('attempts'))
         return ChatResponse(request_id=request_id, agent=state['agent'], answer=state['answer'],
                             provider=state['provider'], activity=state['activity'],
-                            citations=state.get('citations') or [])
+                            citations=state.get('citations') or [], usage=usage)
 
     return app
 

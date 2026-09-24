@@ -79,6 +79,8 @@ class RequestContext:
         request_id = incoming if _SAFE_REQUEST_ID.match(incoming) else uuid4().hex
         token = _request_id.set(request_id)
         fields_token = _annotations.set({})
+        # Starlette's ServerErrorMiddleware runs outside this middleware; expose the id via scope.
+        scope.setdefault('state', {})['request_id'] = request_id
         started = perf_counter()
         status = {'code': 500}
 
