@@ -15,3 +15,7 @@ samconfig.toml
 data/
 *.log
 .DS_Store
+
+# Local recordings and raw design sources
+demo-video/
+

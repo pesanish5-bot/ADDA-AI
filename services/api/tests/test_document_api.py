@@ -64,13 +64,17 @@ def test_lambda_without_persistent_storage_disables_documents():
     assert client.post('/api/documents/demo').status_code == 503
 
 
-@pytest.mark.parametrize('message,expected', [
-    ('Write a Python function to search a list', 'coding'),
-    ('Explain this code and identify the bug', 'coding'),
-    ('Find latest Python news', 'search'),
-    ('Compare React components and fix the code', 'coding'),
-    ('Research solar energy limitations', 'research'),
-    ('Summarize the uploaded PDF', 'document'),
+@pytest.mark.parametrize('message,document_id,expected', [
+    ('Write a Python function to search a list', None, 'coding'),
+    ('Explain this code and identify the bug', None, 'coding'),
+    ('Find latest Python news', None, 'search'),
+    ('Compare React components and fix the code', None, 'coding'),
+    ('Research solar energy limitations', None, 'research'),
+    ('Summarize the uploaded PDF', None, 'document'),
+    ('Summarize the uploaded PDF', 'doc-1', 'document'),
+    ('What is the approved budget?', None, 'search'),
+    ('What is the approved budget?', 'doc-1', 'document'),
+    ('What are the latest developments in AI agents?', None, 'search'),
 ])
-def test_intent_routing_regressions(message, expected):
-    assert select_agent(message, 'auto')[0] == expected
+def test_intent_routing_regressions(message, document_id, expected):
+    assert select_agent(message, 'auto', document_id)[0] == expected

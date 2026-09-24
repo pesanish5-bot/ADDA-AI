@@ -11,7 +11,7 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 | Documents | PDF/TXT upload, local keyword retrieval and page-cited excerpts | Local API tests and browser flow verified |
 | Research | LangGraph plan → two evidence checks → cited extractive brief | Attached-document workflow verified locally |
 | Search | Tavily adapter with bounded results, optional Tavily summary, and real source URLs | Live Search verified on the canonical local API when `TAVILY_API_KEY` is set |
-| AWS | SAM API/Lambda and Amplify configuration prepared | Not deployed; Docker/SAM path unverified |
+| AWS | Amplify frontend + API Gateway/Lambda (`adda-ai-demo`, `ap-south-1`) | Deployed and health-checked; Coding remains demo provider; Bedrock live inference still pending |
 
 The `/login/` and `/register/` pages are frontend previews. There is no account service or protected workspace yet; the forms do not send or save credentials.
 

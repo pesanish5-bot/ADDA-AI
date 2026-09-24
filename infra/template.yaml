@@ -17,8 +17,9 @@ Parameters:
   DemoAccessToken:
     Type: String
     NoEcho: true
-    MinLength: 24
-    Description: Shared demo gate entered by judges in UI. Never put in frontend build variables.
+    Default: ''
+    MinLength: 0
+    Description: Optional shared demo gate. Leave empty for a public hackathon demo. Never put in frontend build variables.
   TavilyApiKey:
     Type: String
     NoEcho: true

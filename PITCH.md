@@ -8,6 +8,6 @@ LangGraph makes the workflow explicit: routing, planning, collection and reporti
 
 Coding has a Bedrock Converse integration, with live inference still pending. Search has a Tavily adapter; a prior local live request returned provider results when a key was configured. Our Research brief is extractive, not model-generated analysis or independent fact-checking. We do not claim embeddings or a vector database in this version.
 
-AWS deployment configuration is prepared for Amplify and API Gateway/Lambda. Account identity is verified, but the application has not been deployed. The Lambda configuration disables process-local documents until shared durable storage is added. That is the next infrastructure step, followed by semantic retrieval if time allows.
+AWS deployment is live in `ap-south-1`: Amplify frontend `https://main.dvhyzvzxczywv.amplifyapp.com/` and API Gateway/Lambda `https://pqrxb30pg5.execute-api.ap-south-1.amazonaws.com` (stack `adda-ai-demo`). Coding remains the labelled demo fixture until Bedrock inference is verified. Documents use private short-lived S3 evidence storage in the Lambda deployment. Semantic retrieval is still future work.
 
 The demonstration shows a working, inspectable document workflow and an extensible graph architecture, with clear boundaries around what has actually been verified.

@@ -8,7 +8,7 @@ html[data-theme="blue"] { --auth-story: #173c69; --auth-story-accent: #b7dbff; }
 .auth-story::after { content: ""; position: absolute; width: 580px; height: 580px; border: 1px solid #ffffff19; border-radius: 50%; right: -310px; bottom: -300px; box-shadow: 0 0 0 65px #ffffff05, 0 0 0 130px #ffffff05; pointer-events: none; }
 .auth-story-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; position: relative; z-index: 1; }
 .auth-story .brand { color: #fff; font-size: 21px; }
-.auth-story .brand-icon { background: var(--auth-story-accent); color: #173128; }
+.auth-story .brand-icon { background: var(--logo-tile); color: var(--logo-spark); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--logo-mid) 35%, transparent); }
 .auth-story .brand > span:last-child { color: var(--auth-story-accent); }
 .auth-edition { font-size: 10px; font-weight: 700; letter-spacing: 1.7px; color: #ffffff9a; white-space: nowrap; }
 .auth-story-content { margin: auto 0; max-width: 610px; position: relative; z-index: 1; padding: 58px 0 80px; }

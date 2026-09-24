@@ -15,7 +15,7 @@ startup script. Do not overwrite either checkout or run simultaneous frontend ed
 - Research: plan, retrieve twice, assemble cited evidence; no model synthesis.
 - Search: Tavily key configured; current adapter requests a provider summary and sources.
   Earlier Cursor notes report live Search success; this latest UI pass did not repeat paid calls.
-- AWS: named profile identity previously verified; no deployment or live Bedrock claim.
+- AWS: Amplify + API Gateway/Lambda deployed in `ap-south-1` (`adda-ai-demo`); health verified. No live Bedrock claim. Public demo needs no access token. Fluid Orb UI live (Amplify job 7).
 
 ## Completed this pass
 Audited both checkouts, running services, environment presence without showing secrets,
@@ -48,10 +48,5 @@ API: `../nexusai/.venv/Scripts/python.exe scripts/start_api.py`.
 Frontend: `npm.cmd run dev -- --hostname 127.0.0.1 --port 3000`.
 
 ## Remaining / exact next action
-Review current frontend with user, then checkpoint the combined repository safely.
-Resolve dependency lock drift before clean-machine setup: pypdf and multipart are
-used by the app but previous lock files need checking. Do not assume a clean install
-works merely because the shared venv passes tests.
-Bedrock test approval remains pending. Deployment is user-owned for now.
-Documents use process memory and are disabled in the Lambda template.
-Local work stops when the PC sleeps. No background/cloud execution is established.
+Hosted demo is live and public: visitors do not need a demo access token.
+Local frontend/API remain available for development. Bedrock live inference remains pending.

@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import ThemePicker from "./theme-picker";
+import WorkspaceOrb from "./ui/workspace-orb";
+import BrandMark from "./brand-mark";
 
 export default function AuthView({ mode }: { mode: "login" | "register" }) {
   const registering = mode === "register";
@@ -21,8 +23,9 @@ export default function AuthView({ mode }: { mode: "login" | "register" }) {
 
   return <main className="auth-page">
     <section className="auth-story" aria-label="About ADDA AI">
-      <div className="auth-story-top"><a className="brand" href="/" aria-label="ADDA AI home"><span className="brand-icon">A</span>ADDA<span>AI</span></a><span className="auth-edition">MULTI-AGENT WORKSPACE</span></div>
+      <div className="auth-story-top"><a className="brand" href="/" aria-label="ADDA AI home"><BrandMark />ADDA<span>AI</span></a><span className="auth-edition">MULTI-AGENT WORKSPACE</span></div>
       <div className="auth-story-content">
+        <div className="auth-orb" aria-hidden="true"><WorkspaceOrb size={160} /></div>
         <span className="auth-kicker"><span /> ONE PLACE FOR EVERY KIND OF WORK</span>
         <h1>One question.<br /><em>The right specialist.</em></h1>
         <p>Bring code, documents, and research into one workspace. See which agent handled your task and the evidence behind its answer.</p>
@@ -38,7 +41,7 @@ export default function AuthView({ mode }: { mode: "login" | "register" }) {
     <section className="auth-side" aria-label={registering ? "Registration" : "Sign in"}>
       <div className="auth-top"><a href="/" className="auth-back">← Back to workspace</a><ThemePicker /></div>
       <div className="auth-card">
-        <div className="auth-mobile-brand"><span className="brand-icon">A</span><strong>ADDA AI</strong></div>
+        <div className="auth-mobile-brand"><BrandMark /><strong>ADDA AI</strong></div>
         <div className="auth-icon" aria-hidden="true">{registering ? "＋" : "↗"}</div>
         <p className="auth-overline">YOUR WORKSPACE</p>
         <h2>{registering ? "Create your account" : "Welcome back"}</h2>

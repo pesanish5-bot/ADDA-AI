@@ -36,7 +36,7 @@ Health advertises configured capabilities and Coding provider; successful respon
 
 ## NEXT — verify integrations and deploy an honest subset
 
-Verify two Bedrock requests with the named AWS profile, then verify Tavily if a key becomes available. Preserve the working no-key document path. SAM/Amplify configuration is prepared but not deployed or runtime-verified. Lambda explicitly disables documents because separate invocations cannot rely on a shared process store. Do not present the local document capability as a deployed Lambda capability.
+Verify two Bedrock requests with the named AWS profile when model access is available. Preserve the working no-key local document path. Amplify + SAM are deployed in `ap-south-1` (`adda-ai-demo`); the Lambda path stores extracted document evidence in a private one-day S3 bucket (`DOCUMENT_ENABLED=true`). Do not present semantic RAG or live Bedrock Coding as current capabilities.
 
 API Gateway HTTP API has a 30-second integration limit; the prepared Lambda budget is 28 seconds. Research currently performs two sequential lookups, so measure its complete latency before enabling it publicly. [AWS HTTP API quotas](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-quotas.html)
 
