@@ -25,9 +25,15 @@ Not production-ready. Definitions in `docs/ROADMAP.md`.
 
 ## In Progress
 
-- Phase 1: verify live Bedrock inference from the deployed API; budget + alarms.
-- `feat/production-baseline` is pushed to GitHub; open/merge the PR into `main` and
-  retire `codex/hackathon-mvp`.
+- Phase 1 (branch `feat/bedrock-coding`, on top of `feat/production-baseline`):
+  provider hardened (token cap, timeout, bounded retry, truncation flag, usage metadata
+  in response and logs, 18 new tests → 107); template gained `BedrockMaxTokens`,
+  `AlertEmail`-gated SNS + AWS Budget + Lambda/Bedrock alarms, and a cross-region IAM
+  grant. Model entitlement for `anthropic.claude-haiku-4-5` verified AUTHORIZED /
+  AVAILABLE in `ap-south-1` without invoking. **Waiting on approval** for the first
+  billable calls and for the alert email/budget amount; nothing paid has run.
+- Branches: neither `feat/production-baseline` nor `feat/bedrock-coding` is merged to
+  `main` (`origin/main` = `4e393fc`). Merge in that order; retire `codex/hackathon-mvp`.
 
 ## Known Issues
 
@@ -69,7 +75,8 @@ Not production-ready. Definitions in `docs/ROADMAP.md`.
 
 ## Tests
 
-- Backend: `python -m pytest -q` in `services/api` → 89 passed (2026-09-24).
+- Backend: `python -m pytest -q` in `services/api` → 107 passed (2026-09-24, Phase 1
+  provider tests added; baseline was 89).
 - Lint: `ruff check .` clean. `pip-audit -r requirements.txt --strict`: no known
   vulnerabilities.
 - Frontend: `npm run typecheck`, `npm run build` last passed on `d63429e` (no frontend
@@ -93,6 +100,10 @@ Not production-ready. Definitions in `docs/ROADMAP.md`.
 
 ## Next Priority
 
-Phase 1: run `check_bedrock.py` with the `nexusai` profile, redeploy the SAM stack with
-`AppEnv=staging Provider=bedrock` (ask before enabling paid calls), confirm
-`provider=bedrock` end-to-end, then add an AWS Budget and CloudWatch alarms.
+Phase 1 completion, gated on approval: (1) two bounded `check_bedrock --invoke` calls
+with `global.anthropic.claude-haiku-4-5-20251001-v1:0`; (2) deploy `Provider=bedrock`
+with `AlertEmail` + `MonthlyBudgetUsd` so the budget and alarms exist before public
+traffic reaches the model; (3) run the verification matrix through the deployed app
+(normal request, code explanation, debug request, larger request, failure path, fixture
+guard) and record results here. Then Phase 2 (Cognito + Postgres) on
+`feat/auth-persistence`.

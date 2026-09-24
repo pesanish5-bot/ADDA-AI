@@ -20,13 +20,24 @@ The static Next.js frontend can be hosted on AWS Amplify Hosting. The FastAPI ba
 
 ## API
 
-Validate and deploy `infra/template.yaml` with SAM. The parameters are `AppEnv` (`staging` default; `production` refuses the demo fixture unless `AllowDemoFixture=true` and requires an https origin), `FrontendOrigin` (the exact Amplify HTTPS origin), `Provider`, `BedrockModelId`, `DemoAccessToken`, and `TavilyApiKey`. Save the `ApiUrl` output. The template scopes the Lambda execution role to document objects under its private bucket, grants `bedrock:InvokeModel` only when `Provider=bedrock`, and sets API Gateway route throttling. After deploying, check `GET /ready` returns 200; it verifies bucket access and provider configuration without invoking a model.
+Validate and deploy `infra/template.yaml` with SAM. The parameters are `AppEnv` (`staging` default; `production` refuses the demo fixture unless `AllowDemoFixture=true` and requires an https origin), `FrontendOrigin` (the exact Amplify HTTPS origin), `Provider`, `BedrockModelId`, `BedrockMaxTokens`, `DemoAccessToken`, `TavilyApiKey`, and the alerting set `AlertEmail`, `MonthlyBudgetUsd`, `BedrockInvocationsPerHourAlarm`. Save the `ApiUrl` output. The template scopes the Lambda execution role to document objects under its private bucket, grants `bedrock:InvokeModel` only when `Provider=bedrock`, and sets API Gateway route throttling. After deploying, check `GET /ready` returns 200; it verifies bucket access and provider configuration without invoking a model.
 
 ```powershell
 sam validate --lint --template-file infra/template.yaml
 sam build --use-container --template-file infra/template.yaml
 sam deploy --guided --template-file .aws-sam/build/template.yaml
 ```
+
+### Enabling real Bedrock Coding
+
+1. Zero-cost check of entitlement: `aws bedrock get-foundation-model-availability --model-id anthropic.claude-haiku-4-5-20251001-v1:0` should report `authorizationStatus: AUTHORIZED` and `entitlementAvailability: AVAILABLE`.
+2. Bounded local check (two small billable calls, ≤300 output tokens each): `python -m app.check_bedrock --profile nexusai --model global.anthropic.claude-haiku-4-5-20251001-v1:0 --invoke` from `services/api`.
+3. Deploy with `Provider=bedrock BedrockModelId=global.anthropic.claude-haiku-4-5-20251001-v1:0 AlertEmail=<ops email> MonthlyBudgetUsd=<amount>`. `AlertEmail` creates the SNS topic, AWS Budget (50/80/100 % actual, 100 % forecast) and the Lambda/Bedrock alarms; confirm the SNS subscription email.
+4. Verify through the application: `/health` shows `provider: bedrock` and the model; a browser Coding request returns `provider: bedrock` with `usage.input_tokens/output_tokens`; CloudWatch access log shows `model`, token counts and `provider_latency_ms`.
+
+Model choice: Claude Haiku 4.5 via the `global.` inference profile is the default (Converse and streaming support, strong coding quality for its price tier, available to this account in `ap-south-1`). `global.anthropic.claude-sonnet-4-6` is the upgrade path; `apac.anthropic.claude-sonnet-4-20250514-v1:0` keeps routing inside APAC if data residency matters. Global profiles may process requests in other AWS regions.
+
+Per-request limits: `BEDROCK_MAX_TOKENS` (default 1500), read timeout 20 s, at most 2 attempts (retry only on throttling/transient errors), 12,000-character prompt cap, per-client rate limit 20 chat requests/min, API Gateway throttle 2 rps.
 
 The Lambda stores extracted chunks, not source PDFs. A document session requires the opaque document token returned by upload; S3 evidence expires after one day. The shared demo access token still permits any holder to call the API. Do not use this design for private multi-user accounts.
 
