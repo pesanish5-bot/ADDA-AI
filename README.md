@@ -2,6 +2,14 @@
 
 A multi-agent workspace with visible routing, document evidence and a bounded Research workflow.
 
+## Contribute to the hackathon project
+
+Contributions are welcome, including small fixes, tests, documentation and accessibility improvements. Check the [open issues](https://github.com/pesanish5-bot/ADDA-AI/issues) for a task or open an issue to discuss a larger change before coding. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, ownership, testing and pull-request steps. You can contribute through a fork and pull request; you do not need direct write access.
+
+This is a time-boxed hackathon build. Please keep changes focused and preserve the working demo. [PROJECT_STATUS.md](PROJECT_STATUS.md) describes what is verified; the dated [team plan](docs/TASK_PLAN.md) is historical coordination context, not a permanent restriction on community contributions.
+
+The repository does not currently have an open-source license. Please do not assume permission to reuse or redistribute the code outside GitHub's terms; the maintainers will revisit licensing separately.
+
 ## What works now
 
 | Capability | Implemented behavior | Verification |
