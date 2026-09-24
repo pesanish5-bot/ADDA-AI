@@ -102,8 +102,10 @@ Resources:
           - Statement:
               - Effect: Allow
                 Action: [bedrock:InvokeModel]
+                # Cross-region (global./apac.) inference profiles route to foundation models in
+                # other regions, so the foundation-model grant cannot be pinned to one region.
                 Resource:
-                  - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/*'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:*::foundation-model/*'
                   - !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*'
           - !Ref AWS::NoValue
       Events:
