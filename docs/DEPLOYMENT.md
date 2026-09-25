@@ -5,10 +5,12 @@
 - Frontend: https://main.dvhyzvzxczywv.amplifyapp.com/
 - API: https://pqrxb30pg5.execute-api.ap-south-1.amazonaws.com
 - Region: `ap-south-1`; CloudFormation stack: `adda-ai-demo`; Amplify app: `dvhyzvzxczywv`.
-- Provider: `demo` for Coding. Search uses a backend-only Tavily key. Documents and Research use real extracted evidence. The public demo API currently has **no shared access token** so visitors can use the workspace without pasting a key.
-- Verified on the currently published revision: public API health, document workflow,
-  frontend root/login/register and CORS. This is the pre-auth demo and must not be
-  described as the production-ready revision.
+- Provider: `demo` for Coding. Search uses a backend-only Tavily key. Documents and
+  Research use real extracted evidence. Cognito authentication is mandatory for workspace
+  API routes; no shared demo token is configured.
+- Verified on the published revision (Amplify job 13): health/readiness, anonymous 401,
+  frontend root/login/register/recovery routes, embedded Cognito configuration and CORS.
+  A full real-recipient signup/login/recovery smoke test is still required.
 
 The static Next.js frontend can be hosted on AWS Amplify Hosting. The FastAPI backend runs in Lambda behind API Gateway HTTP API using the SAM template in `infra/template.yaml`. The backend's extracted PDF evidence is stored in a private S3 bucket with a one-day lifecycle rule. The bucket is retained if the stack is deleted, so remove it separately when retiring the demo.
 

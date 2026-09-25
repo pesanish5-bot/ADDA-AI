@@ -71,6 +71,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       UserPoolName: !Sub '${AWS::StackName}-users'
+      DeletionProtection: ACTIVE
       UsernameAttributes: [email]
       AutoVerifiedAttributes: [email]
       AccountRecoverySetting:

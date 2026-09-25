@@ -21,11 +21,12 @@ separate Google OAuth client and is off by default.
 
 Documents and document Research work without an API key. They use real source text, **not embeddings or language-model synthesis**. Default Coding mode is `demo`: its answer is a fixed connection-test fixture, not generated code. Live provider errors never silently fall back to that fixture.
 
-**Maturity: production-hardening in progress.** Authentication, request controls,
-durable profiles and per-user document isolation are implemented and locally tested.
-The currently published site still runs the earlier public demo until the integration
-stack and frontend are deployed and smoke-tested. Live Bedrock inference also remains
-externally unverified. [PROJECT_STATUS.md](PROJECT_STATUS.md) is the source of truth.
+**Maturity: authenticated staging / production-hardening in progress.** Authentication,
+request controls, durable profiles and per-user document isolation are deployed and
+smoke-tested on the published AWS environment. Coding still uses the clearly labelled
+fixed fixture; live Bedrock inference remains externally unverified. A verified signup
+with a real recipient, restore drill and remaining production controls are still required.
+[PROJECT_STATUS.md](PROJECT_STATUS.md) is the source of truth.
 
 Documentation set:
 

@@ -5,8 +5,8 @@
 ## Current focus
 
 Production Cognito authentication integrated with the Bedrock-hardening branch on
-`codex/auth-bedrock-integration`, preserving the deployed workspace UI. Local regression
-verification is complete; cloud deployment is pending a refreshed AWS CLI session.
+`codex/auth-bedrock-integration`, preserving the workspace UI. The protected AWS stack
+and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
 
 ## Auth
 
@@ -41,12 +41,12 @@ verification is complete; cloud deployment is pending a refreshed AWS CLI sessio
 - Rate limiter is per process; Lambda instances do not share counts.
 - Local venv is Python 3.14 while CI/deploy use 3.13.
 - `docker compose` build/run unverified. Frontend has no eslint.
-- The live site still serves the pre-auth build until the integration deploy completes.
+- The new Three.js component from `main` is present but is not mounted by a page yet;
+  integrate it with reduced-motion/lazy-loading controls or remove the unused module.
 
 ## Security Issues
 
-- Resolved in the integration branch: fail-closed Cognito authentication and per-user
-  document ownership. The risk remains on the old live revision until deployment.
+- Resolved and deployed: fail-closed Cognito authentication and per-user document ownership.
 - Medium: secrets as CloudFormation parameters → env vars. Fix: Phase 6 Secrets Manager.
 - Medium: no CSP on the static site. Fix: Phase 7.
 - Details and strengths: `docs/PRODUCTION_AUDIT.md`, `SECURITY.md`.
@@ -54,18 +54,18 @@ verification is complete; cloud deployment is pending a refreshed AWS CLI sessio
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (last job 11). URL https://main.dvhyzvzxczywv.amplifyapp.com/
-- API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-24 12:50 IST),
-  HTTP API `pqrxb30pg5`, Lambda Python 3.13, private S3 documents bucket (1-day
-  lifecycle). Running commit `e47e634` with `AppEnv=staging`, `Provider=demo`,
-  `DemoAccessToken=""` (stack parameter now matches the public-demo Lambda config; the
-  earlier drift is resolved). Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
+  (job 13 SUCCEED on 2026-09-25). URL https://main.dvhyzvzxczywv.amplifyapp.com/
+- API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-25),
+  HTTP API `pqrxb30pg5`, Lambda Python 3.13, Cognito user pool, encrypted/PITR DynamoDB
+  profiles and private S3 documents bucket (1-day lifecycle). Running integration branch
+  with `AppEnv=staging`, `Provider=demo`, `AUTH_REQUIRED=true`, `DemoAccessToken=""`.
+  Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
   Deploy path: `python scripts/build_lambda_package.py` → `aws cloudformation package`
   → `aws cloudformation deploy` (see OPERATIONS.md). No Docker or SAM CLI needed.
-- Live verification after deploy: `/health` → `environment: staging`, `version: 0.2.0`;
-  `/ready` → 200 with `document_bucket` ok; chat returns `X-Request-ID` and CORS headers
-  for the Amplify origin; 422 error carries `request_id`; sample PDF upload → cited
-  extractive answer → delete all 200; JSON access log lines present in CloudWatch.
+- Live verification after auth deploy: `/health` reports Cognito configured/required;
+  `/ready` → 200; anonymous chat → 401; live root/login/register/recovery → 200; deployed
+  bundles contain the generated pool/client/API identifiers; Amplify-origin CORS is correct.
+  Real email delivery and an authenticated cross-user document smoke test remain pending.
 - Target architecture (ADRs 0001–0005): ECS Fargate, Postgres + pgvector, Cognito, SQS
   worker. Nothing provisioned yet; all require approval (recurring cost).
 
@@ -95,8 +95,8 @@ verification is complete; cloud deployment is pending a refreshed AWS CLI sessio
 
 ## Next Priority
 
-Push and review `codex/auth-bedrock-integration`, refresh the `nexusai` AWS login, deploy
-Cognito/Dynamo/API, rebuild Amplify with the stack's public auth outputs, and run the
-account/isolation smoke matrix. Enable Bedrock only with an alert email and approved
-budget, then run the bounded model verification matrix. The BrandMark/fluid-orb workspace
-is preserved.
+Review and merge PR #6, then run signup/verification/login/recovery with a real recipient
+and the authenticated cross-user document isolation matrix. Configure production SES
+before declaring production. Enable Bedrock only with an alert email
+and approved budget, then run the bounded model verification matrix. The BrandMark/fluid-
+orb workspace is preserved.

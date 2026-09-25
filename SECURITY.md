@@ -9,7 +9,8 @@ reporting or a direct message). Do not open public issues for security problems.
 
 - **Identity**: Amazon Cognito email registration, verification, recovery and signed JWT
   validation. Staging/production fail startup unless authentication, Cognito and the
-  durable profile table are configured. The currently published demo predates this branch.
+  durable profile table are configured. This protected configuration is deployed to the
+  published staging environment.
 - **Document access**: both the authenticated Cognito subject and a per-document random
   token are required. S3 stores only the token hash beside extracted text. Cross-user
   lookup and deletion return the same 404 as missing data. Tokens are never logged.
