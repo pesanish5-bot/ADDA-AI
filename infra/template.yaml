@@ -326,6 +326,11 @@ Resources:
   BedrockInvocationsAlarm:
     Type: AWS::CloudWatch::Alarm
     Condition: BedrockAlerts
+    Metadata:
+      cfn-lint:
+        config:
+          # BedrockModelId may be empty only when this conditional resource is omitted.
+          ignore_checks: [W1030]
     Properties:
       AlarmDescription: Unexpectedly high Bedrock invocation volume for the configured model in one hour.
       Namespace: AWS/Bedrock
