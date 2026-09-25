@@ -101,7 +101,7 @@ def create_app(
     def authorize(
         x_demo_token: str | None = Header(default=None),
         authorization: str | None = Header(default=None),
-    ):
+    ) -> dict:
         if settings.demo_access_token and not secrets.compare_digest(
             (x_demo_token or '').encode(), settings.demo_access_token.encode()
         ):
@@ -118,6 +118,15 @@ def create_app(
                 dev_jwt_secret=settings.auth_dev_jwt_secret,
             )
             annotate(user_sub=str(claims.get('sub') or ''))
+            try:
+                auth.me(claims)
+            except PermissionError:
+                raise HTTPException(
+                    403,
+                    detail={'code': 'forbidden', 'message': 'This account is disabled.'},
+                ) from None
+            return claims
+        return {}
 
     @app.get('/health')
     def health():
@@ -127,7 +136,9 @@ def create_app(
                 'model': settings.bedrock_model_id if settings.nexus_provider == 'bedrock' else None,
                 'auth': {
                     'configured': settings.auth_configured,
-                    'provider': 'cognito' if settings.cognito_configured else ('dev' if settings.auth_dev_jwt_secret else 'none'),
+                    'provider': 'cognito' if settings.cognito_configured else (
+                        'dev' if settings.auth_dev_jwt_secret else 'none'
+                    ),
                     'required': settings.api_requires_auth,
                 },
                 'capabilities': {'coding': True, 'document': settings.document_enabled,
@@ -153,34 +164,48 @@ def create_app(
         status_code = 200 if all(item['ok'] for item in checks) else 503
         return JSONResponse(status_code=status_code, content={'ready': status_code == 200, 'checks': checks})
 
-    @app.post('/api/documents', dependencies=[Depends(authorize)])
-    def upload_document(file: UploadFile = File(...)):
+    @app.post('/api/documents')
+    def upload_document(file: UploadFile = File(...), claims: dict = Depends(authorize)):
         try:
             if not settings.document_enabled:
                 raise ProviderError('Document storage is unavailable in this deployment.', 'documents_disabled', 503)
             data = file.file.read(MAX_BYTES + 1)
-            result = documents.ingest(data, file.filename or 'upload')
+            result = documents.ingest(
+                data, file.filename or 'upload', owner_id=str(claims.get('sub') or '')
+            )
             annotate(route='document_upload', pages=result['pages'])
             return result
         finally:
             file.file.close()
 
-    @app.post('/api/documents/demo', dependencies=[Depends(authorize)])
-    def demo_document():
+    @app.post('/api/documents/demo')
+    def demo_document(claims: dict = Depends(authorize)):
         if not settings.document_enabled:
             raise ProviderError('Document storage is unavailable in this deployment.', 'documents_disabled', 503)
         source = Path(__file__).parent / 'samples' / 'atlas-project.pdf'
         annotate(route='document_sample')
-        return documents.ingest(source.read_bytes(), source.name)
+        return documents.ingest(
+            source.read_bytes(), source.name, owner_id=str(claims.get('sub') or '')
+        )
 
-    @app.delete('/api/documents/{document_id}', dependencies=[Depends(authorize)])
-    def delete_document(document_id: str, x_document_token: str = Header(default='')):
-        documents.delete(document_id, x_document_token)
+    @app.delete('/api/documents/{document_id}')
+    def delete_document(
+        document_id: str,
+        x_document_token: str = Header(default=''),
+        claims: dict = Depends(authorize),
+    ):
+        documents.delete(
+            document_id, x_document_token, owner_id=str(claims.get('sub') or '')
+        )
         annotate(route='document_delete')
         return {'deleted': True}
 
-    @app.post('/api/chat', response_model=ChatResponse, dependencies=[Depends(authorize)])
-    def chat(body: ChatRequest, x_document_token: str = Header(default='')):
+    @app.post('/api/chat', response_model=ChatResponse)
+    def chat(
+        body: ChatRequest,
+        x_document_token: str = Header(default=''),
+        claims: dict = Depends(authorize),
+    ):
         request_id = current_request_id()
         if body.document_id and not settings.document_enabled:
             raise ProviderError('Document storage is unavailable in this deployment.', 'documents_disabled', 503)
@@ -188,7 +213,8 @@ def create_app(
         state = graph.invoke({'message': body.message, 'requested_agent': body.agent,
                               'agent': '', 'answer': '', 'activity': [], 'citations': [],
                               'document_id': body.document_id, 'document_token': x_document_token,
-                              'provider': settings.nexus_provider, 'plan': [], 'collection': {}, 'usage': None})
+                              'provider': settings.nexus_provider, 'plan': [], 'collection': {},
+                              'usage': None, 'user_id': str(claims.get('sub') or '')})
         usage = state.get('usage')
         annotate(agent=state['agent'], provider=state['provider'])
         if usage:

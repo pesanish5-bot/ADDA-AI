@@ -12,6 +12,7 @@ NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-south-1_xxxxx
 NEXT_PUBLIC_COGNITO_CLIENT_ID=xxxxxxxx
 NEXT_PUBLIC_COGNITO_DOMAIN=your-prefix.auth.ap-south-1.amazoncognito.com
+NEXT_PUBLIC_GOOGLE_SIGN_IN_ENABLED=false
 ```
 
 ## API env (`services/api/.env`)
@@ -21,6 +22,7 @@ COGNITO_USER_POOL_ID=ap-south-1_xxxxx
 COGNITO_CLIENT_ID=xxxxxxxx
 COGNITO_REGION=ap-south-1
 AUTH_REQUIRED=true
+AUTH_PROFILES_TABLE=adda-ai-profiles
 ```
 
 ## Cognito console checklist (email codes)
@@ -29,7 +31,7 @@ AUTH_REQUIRED=true
 2. **Self-registration** enabled
 3. **Attributes** → email required; auto-verify **email**
 4. **Messaging** → Cognito default email (or SES with production access / verified recipients)
-5. App client: public, **no client secret**, ALLOW_USER_SRP_AUTH + ALLOW_USER_PASSWORD_AUTH + refresh
+5. App client: public, **no client secret**, SRP + refresh-token auth
 6. After signup, user status must be **UNCONFIRMED** until the code is entered
 7. Check spam; Cognito default sender is often `verificationemail@amazoncognito.com`
 
@@ -51,7 +53,8 @@ If email never arrives while users show as UNCONFIRMED:
 5. Sign-out URLs:
    - `http://127.0.0.1:3000/login/`
    - `https://main.dvhyzvzxczywv.amplifyapp.com/login/`
-6. Set `NEXT_PUBLIC_COGNITO_DOMAIN` (no `https://`)
+6. Set `NEXT_PUBLIC_COGNITO_DOMAIN` (no `https://`) and
+   `NEXT_PUBLIC_GOOGLE_SIGN_IN_ENABLED=true`
 
 Never put the Google client secret in `NEXT_PUBLIC_*`.
 
@@ -59,10 +62,11 @@ Never put the Google client secret in `NEXT_PUBLIC_*`.
 
 Default ADDA AI pool policy displayed in the UI:
 
-- Minimum length 8
+- Minimum length 12
 - Require lowercase
+- Require uppercase
 - Require number
-- Uppercase / symbol not required
+- Symbol not required
 
 If you change the pool policy, update `PASSWORD_RULES` in `apps/web/lib/cognito.ts`.
 
@@ -72,7 +76,7 @@ If you change the pool policy, update `PASSWORD_RULES` in `apps/web/lib/cognito.
 |------|--------|
 | `/login/` `/register/` `/verify-email/` `/forgot-password/` | Public |
 | `/` (workspace) | Authenticated only |
-| `/api/chat`, `/api/documents*` | Bearer Cognito ID token when `AUTH_REQUIRED=true` |
+| `/api/chat`, `/api/documents*` | Bearer Cognito ID token; disabled users rejected; documents owner-scoped |
 | `/health` | Public |
 
 ## Amplify

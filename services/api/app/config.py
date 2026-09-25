@@ -45,7 +45,8 @@ class Settings(BaseSettings):
     auth_profiles_table: str = ''
     auth_dev_jwt_secret: str = ''
     admin_emails: str = ''
-    auth_required: bool = True
+    # Local development may opt out explicitly; staging/production must enable auth.
+    auth_required: bool = False
 
     # Per-client, per-process limits. Edge throttling (API Gateway / WAF) remains the
     # authoritative control; this stops one client from exhausting one instance.
@@ -78,7 +79,9 @@ class Settings(BaseSettings):
 
     @property
     def api_requires_auth(self) -> bool:
-        return bool(self.auth_required) and self.auth_configured
+        # Never silently turn authentication off because configuration is incomplete.
+        # verify_bearer_token will return a safe 503 until the operator fixes it.
+        return bool(self.auth_required)
 
     @property
     def admin_email_set(self) -> set[str]:
@@ -113,6 +116,16 @@ class Settings(BaseSettings):
                 problems.append('ALLOWED_ORIGINS is empty.')
             if self.document_enabled and not self.document_bucket.strip():
                 warnings.append('Documents use process memory without DOCUMENT_BUCKET; uploads are lost on restart and not shared across instances.')
+            if not self.auth_required:
+                problems.append(f'AUTH_REQUIRED must be true in {self.app_env}.')
+            if not self.cognito_configured:
+                problems.append(f'Cognito user pool and client IDs are required in {self.app_env}.')
+            if not self.auth_profiles_table.strip():
+                problems.append(f'AUTH_PROFILES_TABLE is required in {self.app_env}.')
+            if self.auth_dev_jwt_secret.strip():
+                problems.append('AUTH_DEV_JWT_SECRET is allowed only in development.')
+        elif self.auth_required and not self.auth_configured:
+            problems.append('AUTH_REQUIRED=true requires Cognito or AUTH_DEV_JWT_SECRET.')
         if problems:
             raise ConfigurationError(' '.join(problems))
         return warnings

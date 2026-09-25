@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi.testclient import TestClient
@@ -12,7 +12,7 @@ SECRET = 'test-cognito-dev-jwt-secret-at-least-32-chars!!'
 
 
 def _token(sub: str, email: str, *, exp_hours: int = 1, display_name: str = 'Test User') -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return jwt.encode(
         {
             'sub': sub,
@@ -85,3 +85,24 @@ def test_chat_requires_bearer_when_auth_required():
     token = _token('user-4', 'coder@example.com')
     ok = client.post('/api/chat', json={'message': 'code'}, headers={'Authorization': f'Bearer {token}'})
     assert ok.status_code == 200
+
+
+def test_disabled_user_cannot_use_workspace_routes():
+    settings = Settings(
+        _env_file=None,
+        nexus_provider='demo',
+        auth_dev_jwt_secret=SECRET,
+        auth_required=True,
+    )
+    store = MemoryUserStore()
+    store.upsert_profile('disabled-user', 'disabled@example.com')
+    store.profiles['disabled-user']['status'] = 'disabled'
+    client = TestClient(create_app(settings, auth_service=AuthService(settings, store)))
+    token = _token('disabled-user', 'disabled@example.com')
+    response = client.post(
+        '/api/chat',
+        json={'message': 'code'},
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == 403
+    assert response.json()['detail']['code'] == 'forbidden'

@@ -5,13 +5,14 @@
 Report vulnerabilities privately to the repository owner (GitHub private vulnerability
 reporting or a direct message). Do not open public issues for security problems.
 
-## Current security model (2026-09-24, prototype)
+## Current security model (2026-09-25, integration branch)
 
-- **Identity**: none. An optional shared `DEMO_ACCESS_TOKEN` gates the API (constant-time
-  compare). The live demo runs without it. Real authentication is Phase 2 (ADR-0003).
-- **Document access**: a per-document random token, returned once at upload; its SHA-256
-  is stored beside the extracted text. Anyone holding the token can query or delete the
-  document. Tokens are never logged.
+- **Identity**: Amazon Cognito email registration, verification, recovery and signed JWT
+  validation. Staging/production fail startup unless authentication, Cognito and the
+  durable profile table are configured. The currently published demo predates this branch.
+- **Document access**: both the authenticated Cognito subject and a per-document random
+  token are required. S3 stores only the token hash beside extracted text. Cross-user
+  lookup and deletion return the same 404 as missing data. Tokens are never logged.
 - **Transport**: HTTPS via API Gateway and Amplify. CORS is limited to configured origins
   and three methods; `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`
   and `Cache-Control: no-store` are set on API responses.
@@ -32,9 +33,10 @@ reporting or a direct message). Do not open public issues for security problems.
 
 ## Environment guards
 
-`APP_ENV=production` refuses to start when `NEXUS_PROVIDER=demo` (unless
-`ALLOW_DEMO_FIXTURE=true`), when any allowed origin is not `https://`, or when the Bedrock
-provider has no model id. Interactive API docs are disabled in production.
+`APP_ENV=staging` and `production` refuse to start without mandatory Cognito auth and a
+durable profile table, with a development JWT secret, or with insecure origins.
+Production also refuses an unapproved demo fixture; Bedrock requires a model id.
+Interactive API docs are disabled in production.
 
 ## Data handling
 
@@ -45,6 +47,7 @@ provider has no model id. Interactive API docs are disabled in production.
 | Search queries | request only | not stored | Tavily (when enabled) |
 | Task history | browser sessionStorage | until tab closes | none |
 | Access logs | CloudWatch | account default | AWS |
+| User profile and auth audit events | DynamoDB (encrypted, PITR) | profile lifetime; events 90 days | AWS |
 
 No regulatory compliance is claimed. A privacy notice, data export and deletion endpoints
 are planned in Phase 7.

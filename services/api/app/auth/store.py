@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 from uuid import uuid4
 
+import boto3
+
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class UserStore(Protocol):
@@ -47,7 +49,7 @@ class MemoryUserStore:
         profile = {
             'id': user_id,
             'email': email.lower(),
-            'display_name': display_name or email.split('@')[0],
+            'display_name': display_name or email.split('@', maxsplit=1)[0],
             'status': 'active',
             'is_admin': is_admin,
             'login_count': 0,
@@ -88,8 +90,6 @@ class DynamoUserStore:
     """Persists profiles and auth events in DynamoDB (same AWS account as Cognito/Bedrock)."""
 
     def __init__(self, table_name: str, region: str) -> None:
-        import boto3
-
         self.table = boto3.resource('dynamodb', region_name=region).Table(table_name)
 
     def upsert_profile(
@@ -118,7 +118,7 @@ class DynamoUserStore:
             'sk': 'PROFILE',
             'id': user_id,
             'email': email.lower(),
-            'display_name': display_name or email.split('@')[0],
+            'display_name': display_name or email.split('@', maxsplit=1)[0],
             'status': 'active',
             'is_admin': is_admin,
             'login_count': 0,

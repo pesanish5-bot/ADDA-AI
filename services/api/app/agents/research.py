@@ -18,13 +18,15 @@ def plan_research(query: str) -> list[str]:
 
 def collect_research(query: str, plan: list[str], document_store,
                      document_id: str | None, document_token: str | None,
-                     search_provider) -> dict:
+                     search_provider, owner_id: str = '') -> dict:
     # Clamp independently of the planner: callers cannot request unbounded work.
     questions = plan[:2] or plan_research(query)
     citations, checks, seen = [], [], set()
     for question in questions:
         if document_id:
-            result = document_store.answer(document_id, document_token or '', question)
+            result = document_store.answer(
+                document_id, document_token or '', question, owner_id=owner_id
+            )
         else:
             result = search_provider.search(question)
         evidence_count = 0

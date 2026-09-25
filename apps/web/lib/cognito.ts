@@ -16,14 +16,14 @@ import {
 
 let configured = false;
 
-/** Matches Cognito pool policy used for ADDA AI (min 8, lower + number). */
+/** Matches the Cognito pool password policy deployed for ADDA AI. */
 export const PASSWORD_RULES = {
-  minLength: 8,
+  minLength: 12,
   requireLowercase: true,
-  requireUppercase: false,
+  requireUppercase: true,
   requireNumber: true,
   requireSymbol: false,
-  label: "At least 8 characters, including a lowercase letter and a number.",
+  label: "At least 12 characters, including upper/lowercase letters and a number.",
 };
 
 export function cognitoConfigured(): boolean {
@@ -34,7 +34,10 @@ export function cognitoConfigured(): boolean {
 }
 
 export function googleConfigured(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_COGNITO_DOMAIN?.trim());
+  return (
+    process.env.NEXT_PUBLIC_GOOGLE_SIGN_IN_ENABLED === "true"
+    && Boolean(process.env.NEXT_PUBLIC_COGNITO_DOMAIN?.trim())
+  );
 }
 
 function redirectOrigins(): string[] {
@@ -72,7 +75,9 @@ function logoutOrigins(): string[] {
 export function ensureCognito(): boolean {
   if (!cognitoConfigured()) return false;
   if (!configured) {
-    const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN?.trim();
+    const domain = googleConfigured()
+      ? process.env.NEXT_PUBLIC_COGNITO_DOMAIN?.trim()
+      : undefined;
     Amplify.configure({
       Auth: {
         Cognito: {
@@ -239,7 +244,7 @@ export async function cognitoConfirmForgotPassword(
 export async function cognitoSignInWithGoogle() {
   if (!ensureCognito()) throw new Error("Cognito is not configured yet.");
   if (!googleConfigured()) {
-    throw new Error("Google sign-in is not configured yet. Add NEXT_PUBLIC_COGNITO_DOMAIN.");
+    throw new Error("Google sign-in is not configured yet.");
   }
   await signInWithRedirect({ provider: "Google" });
 }

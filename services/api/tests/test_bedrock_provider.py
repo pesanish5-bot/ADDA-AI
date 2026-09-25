@@ -3,6 +3,8 @@ import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 from fastapi.testclient import TestClient
 
+from app.auth.service import AuthService
+from app.auth.store import MemoryUserStore
 from app.config import ConfigurationError, Settings
 from app.main import create_app
 from app.providers import DEMO_ANSWER, TRUNCATION_NOTE, CodingProvider, ProviderError
@@ -158,8 +160,26 @@ def test_production_bedrock_failure_returns_error_not_fixture(monkeypatch):
                         lambda *a, **kw: FakeBedrock([client_error('ServiceUnavailableException'),
                                                       client_error('ServiceUnavailableException')]))
     monkeypatch.setattr('app.providers.sleep', lambda *_: None)
-    client = TestClient(create_app(bedrock_settings(app_env='production', allowed_origins='https://app.example.com')))
-    response = client.post('/api/chat', json={'message': 'Write code'})
+    settings = bedrock_settings(
+        app_env='production',
+        allowed_origins='https://app.example.com',
+        auth_required=True,
+        cognito_user_pool_id='ap-south-1_example',
+        cognito_client_id='client-id',
+        auth_profiles_table='profiles',
+    )
+    monkeypatch.setattr(
+        'app.main.verify_bearer_token',
+        lambda *args, **kwargs: {'sub': 'test-user', 'email': 'test@example.com'},
+    )
+    client = TestClient(create_app(
+        settings, auth_service=AuthService(settings, MemoryUserStore())
+    ))
+    response = client.post(
+        '/api/chat',
+        json={'message': 'Write code'},
+        headers={'Authorization': 'Bearer test-token'},
+    )
     assert response.status_code == 503
     assert response.json()['detail']['code'] == 'provider_unavailable'
     assert 'Offline connection test' not in response.text

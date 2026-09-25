@@ -6,7 +6,9 @@
 - API: https://pqrxb30pg5.execute-api.ap-south-1.amazonaws.com
 - Region: `ap-south-1`; CloudFormation stack: `adda-ai-demo`; Amplify app: `dvhyzvzxczywv`.
 - Provider: `demo` for Coding. Search uses a backend-only Tavily key. Documents and Research use real extracted evidence. The public demo API currently has **no shared access token** so visitors can use the workspace without pasting a key.
-- Verified: API health, Coding response without a token, document upload/query/Research/delete, frontend root/login/register, and CORS from the Amplify origin. Login and register remain UI previews.
+- Verified on the currently published revision: public API health, document workflow,
+  frontend root/login/register and CORS. This is the pre-auth demo and must not be
+  described as the production-ready revision.
 
 The static Next.js frontend can be hosted on AWS Amplify Hosting. The FastAPI backend runs in Lambda behind API Gateway HTTP API using the SAM template in `infra/template.yaml`. The backend's extracted PDF evidence is stored in a private S3 bucket with a one-day lifecycle rule. The bucket is retained if the stack is deleted, so remove it separately when retiring the demo.
 
@@ -20,7 +22,11 @@ The static Next.js frontend can be hosted on AWS Amplify Hosting. The FastAPI ba
 
 ## API
 
-Validate and deploy `infra/template.yaml` with SAM. The parameters are `AppEnv` (`staging` default; `production` refuses the demo fixture unless `AllowDemoFixture=true` and requires an https origin), `FrontendOrigin` (the exact Amplify HTTPS origin), `Provider`, `BedrockModelId`, `BedrockMaxTokens`, `DemoAccessToken`, `TavilyApiKey`, and the alerting set `AlertEmail`, `MonthlyBudgetUsd`, `BedrockInvocationsPerHourAlarm`. Save the `ApiUrl` output. The template scopes the Lambda execution role to document objects under its private bucket, grants `bedrock:InvokeModel` only when `Provider=bedrock`, and sets API Gateway route throttling. After deploying, check `GET /ready` returns 200; it verifies bucket access and provider configuration without invoking a model.
+Validate and deploy `infra/template.yaml` with SAM. The stack provisions Cognito,
+DynamoDB profiles, the protected API, private document storage and optional Bedrock/cost
+alerts. Save `ApiUrl`, `CognitoUserPoolId`, `CognitoUserPoolClientId` and
+`CognitoDomain` from the outputs. `AuthRequired` is intentionally restricted to `true`.
+After deploying, check `GET /ready` and verify an unauthenticated API call returns 401.
 
 ```powershell
 sam validate --lint --template-file infra/template.yaml
@@ -43,12 +49,19 @@ The Lambda stores extracted chunks, not source PDFs. A document session requires
 
 ## Frontend
 
-Build `apps/web` with `NEXT_PUBLIC_API_BASE_URL` set to the API output, then publish the *contents* of `apps/web/out` to a manual Amplify Hosting deployment, or configure the repository build with `amplify.yml`. On Windows, create the upload zip with POSIX paths (for example Python `zipfile` and `Path.as_posix()`). Do not use `Compress-Archive`, which can break `/_next` asset URLs. Set `FrontendOrigin` to `https://main.<Amplify default domain>` (or the configured custom domain) before testing browser requests. Never put API tokens, Tavily keys, or AWS credentials in `NEXT_PUBLIC_*` variables.
+Build `apps/web` with `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_COGNITO_USER_POOL_ID`
+and `NEXT_PUBLIC_COGNITO_CLIENT_ID` set from stack outputs, then publish the *contents*
+of `apps/web/out`. Set the domain and explicit Google flag only after Google federation
+is configured. Never put API tokens, provider keys or AWS credentials in public variables.
 
-The `/login` and `/register` pages are UI previews; they do not create accounts or establish sessions. The shared access token is entered at runtime in the workspace. Add a real identity provider and per-user authorization before offering private accounts.
+Email registration sends a Cognito verification code and establishes a real session after
+confirmation and login. The workspace redirects unauthenticated visitors to `/login/`.
 
 ## Smoke test
 
-Check `/health`, missing-token rejection, a Coding request with the token, PDF upload/query/delete across requests, Research, and Search if Tavily is configured. Verify the browser can call the API from the deployed HTTPS origin, and check the login/register and theme controls. Inspect CloudWatch logs for unexpected errors without publishing secrets or document text. Record the deployed URLs, region, revision, and verification outcome in demo notes.
+Create and verify a new account, sign in, confirm missing/expired-token rejection, run a
+Coding request, upload/query/delete a document, sign out, and verify another account
+cannot access the first account's document. Also test password recovery, throttling and
+disabled-account rejection. Inspect CloudWatch logs without publishing secrets or text.
 
 For Bedrock, confirm a Converse-compatible model and permission for the actual inference profile and destination model ARNs, then switch the provider and test two distinct prompts. [Bedrock model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html)

@@ -29,8 +29,8 @@ class S3DocumentStore(DocumentStore):
             raise ProviderError('Document unavailable or expired. Upload it again.', 'document_not_found', 404)
         return f'documents/{document_id}.json'
 
-    def ingest(self, data: bytes, filename: str) -> dict:
-        result = super().ingest(data, filename)
+    def ingest(self, data: bytes, filename: str, owner_id: str = '') -> dict:
+        result = super().ingest(data, filename, owner_id)
         document_id = result['document_id']
         with self._lock:
             document = self._documents.pop(document_id)
@@ -40,6 +40,7 @@ class S3DocumentStore(DocumentStore):
             'pages': document.pages,
             'chunks': document.chunks,
             'expires_at': time.time() + self.ttl_seconds,
+            'owner_id': document.owner_id,
         }
         try:
             self.client.put_object(Bucket=self.bucket, Key=self._key(document_id),
@@ -50,7 +51,7 @@ class S3DocumentStore(DocumentStore):
                                 'document_storage', 503) from exc
         return result
 
-    def _get(self, document_id: str, token: str) -> _Document:
+    def _get(self, document_id: str, token: str, owner_id: str = '') -> _Document:
         key = self._key(document_id)
         try:
             response = self.client.get_object(Bucket=self.bucket, Key=key)
@@ -62,13 +63,15 @@ class S3DocumentStore(DocumentStore):
             raise ProviderError('Document storage is temporarily unavailable. Try again.',
                                 'document_storage', 503) from exc
         valid = secrets.compare_digest(payload['token_hash'], sha256((token or '').encode()).hexdigest())
-        if not valid or payload['expires_at'] <= time.time():
+        owner_matches = not owner_id or payload.get('owner_id', '') == owner_id
+        if not valid or not owner_matches or payload['expires_at'] <= time.time():
             raise ProviderError('Document unavailable or expired. Upload it again.', 'document_not_found', 404)
         return _Document('', payload['filename'], payload['pages'],
-                         tuple((int(page), text) for page, text in payload['chunks']), 0)
+                         tuple((int(page), text) for page, text in payload['chunks']), 0,
+                         payload.get('owner_id', ''))
 
-    def delete(self, document_id: str, document_token: str) -> None:
-        self._get(document_id, document_token)
+    def delete(self, document_id: str, document_token: str, owner_id: str = '') -> None:
+        self._get(document_id, document_token, owner_id)
         try:
             self.client.delete_object(Bucket=self.bucket, Key=self._key(document_id))
         except ClientError as exc:

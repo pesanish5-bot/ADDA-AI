@@ -13,11 +13,19 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 | Search | Tavily adapter with bounded results, optional Tavily summary, and real source URLs | Live Search verified on the canonical local API when `TAVILY_API_KEY` is set |
 | AWS | Amplify frontend + API Gateway/Lambda (`adda-ai-demo`, `ap-south-1`) | Deployed and health-checked; Coding remains demo provider; Bedrock live inference still pending |
 
-The `/login/` and `/register/` pages are frontend previews. There is no account service or protected workspace yet; the forms do not send or save credentials.
+The `/login/`, `/register/`, `/verify-email/` and `/forgot-password/` flows use Amazon
+Cognito when configured. The workspace and application APIs require a signed Cognito
+session in deployed environments. The infrastructure template provisions the user pool,
+public web client and durable DynamoDB profiles; optional Google federation requires a
+separate Google OAuth client and is off by default.
 
 Documents and document Research work without an API key. They use real source text, **not embeddings or language-model synthesis**. Default Coding mode is `demo`: its answer is a fixed connection-test fixture, not generated code. Live provider errors never silently fall back to that fixture.
 
-**Maturity: prototype.** It deploys and is public, but it has no user accounts, no durable data and no verified live model inference yet. [PROJECT_STATUS.md](PROJECT_STATUS.md) is the source of truth for stage, issues and next priority.
+**Maturity: production-hardening in progress.** Authentication, request controls,
+durable profiles and per-user document isolation are implemented and locally tested.
+The currently published site still runs the earlier public demo until the integration
+stack and frontend are deployed and smoke-tested. Live Bedrock inference also remains
+externally unverified. [PROJECT_STATUS.md](PROJECT_STATUS.md) is the source of truth.
 
 Documentation set:
 
@@ -60,7 +68,12 @@ On macOS/Linux use `.venv/bin/python`, `cp` and `npm` equivalents. `docker compo
 
 ## Configuration and limits
 
-Backend `.env` controls `APP_ENV`, `NEXUS_PROVIDER`, `ALLOW_DEMO_FIXTURE`, `DOCUMENT_ENABLED`, `DOCUMENT_BUCKET`, `AWS_REGION`, `BEDROCK_MODEL_ID`, `TAVILY_API_KEY`, `ALLOWED_ORIGINS`, rate-limit settings and optional local `DEMO_ACCESS_TOKEN`; see `services/api/.env.example`. `APP_ENV=production` refuses to start with the demo fixture or non-https origins. Every response carries `X-Request-ID`, and `GET /ready` reports dependency checks. The frontend only needs `NEXT_PUBLIC_API_BASE_URL`. Never put AWS/provider secrets in public frontend variables.
+Backend `.env` controls `APP_ENV`, model/search/document settings and Cognito identifiers;
+see `services/api/.env.example`. Staging and production refuse guest mode, missing Cognito
+or durable profile configuration, insecure origins, and unsafe provider configuration.
+Every response carries `X-Request-ID`, and `GET /ready` reports dependency checks. The
+frontend needs the API URL plus the public Cognito pool/client identifiers. Never put
+AWS/provider secrets in public frontend variables.
 
 Uploads accept PDF or UTF-8 TXT up to 5 MB, with PDFs capped at 30 pages. Extracted text and PDF decompression are additionally bounded. Documents live in one API process for up to one hour, at most ten documents, and disappear on restart. Each document requires its separate secret token for retrieval and deletion. There is no durable storage or multi-instance document support. Browser task history is memory-only; prompts are independent, not a conversation-memory system.
 

@@ -15,6 +15,11 @@ Parameters:
     Type: String
     Default: demo
     AllowedValues: [demo, bedrock]
+  AuthRequired:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true']
+    Description: Authentication is mandatory for every deployed API request.
   AllowDemoFixture:
     Type: String
     Default: 'false'
@@ -60,6 +65,91 @@ Conditions:
   HasAlerts: !Not [!Equals [!Ref AlertEmail, '']]
   BedrockAlerts: !And [!Condition UseBedrock, !Condition HasAlerts]
 Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-users'
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      MfaConfiguration: OPTIONAL
+      EnabledMfas: [SOFTWARE_TOKEN_MFA]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          TemporaryPasswordValidityDays: 3
+      UserAttributeUpdateSettings:
+        AttributesRequireVerificationBeforeUpdate: [email]
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+        - Name: name
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub '${AWS::StackName}-web'
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      SupportedIdentityProviders: [COGNITO]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs: [!Sub '${FrontendOrigin}/']
+      LogoutURLs: [!Sub '${FrontendOrigin}/login/']
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub '${AWS::StackName}-${AWS::AccountId}'
+      UserPoolId: !Ref UserPool
+  AuthProfilesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -89,6 +179,11 @@ Resources:
           TAVILY_API_KEY: !Ref TavilyApiKey
           DOCUMENT_ENABLED: 'true'
           DOCUMENT_BUCKET: !Ref DocumentsBucket
+          AUTH_REQUIRED: !Ref AuthRequired
+          COGNITO_USER_POOL_ID: !Ref UserPool
+          COGNITO_CLIENT_ID: !Ref UserPoolClient
+          COGNITO_REGION: !Ref AWS::Region
+          AUTH_PROFILES_TABLE: !Ref AuthProfilesTable
       Policies:
         - Statement:
             - Effect: Allow
@@ -97,6 +192,14 @@ Resources:
             - Effect: Allow
               Action: [s3:ListBucket]
               Resource: !GetAtt DocumentsBucket.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+              Resource: !GetAtt AuthProfilesTable.Arn
         - !If
           - UseBedrock
           - Statement:
@@ -241,3 +344,15 @@ Outputs:
   DocumentsBucketName:
     Description: Private extracted document evidence with one-day object expiry.
     Value: !Ref DocumentsBucket
+  CognitoUserPoolId:
+    Description: Public frontend authentication configuration.
+    Value: !Ref UserPool
+  CognitoUserPoolClientId:
+    Description: Public Cognito app client ID (no client secret).
+    Value: !Ref UserPoolClient
+  CognitoDomain:
+    Description: Hosted UI domain. Google remains disabled until its IdP is configured.
+    Value: !Sub '${AWS::StackName}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com'
+  AuthProfilesTableName:
+    Description: Durable user profiles and bounded authentication audit events.
+    Value: !Ref AuthProfilesTable

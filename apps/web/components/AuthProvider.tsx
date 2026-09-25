@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { Hub } from "aws-amplify/utils";
+import { syncAuthProfile } from "../lib/api";
 import {
   cognitoConfigured,
   cognitoConfirmForgotPassword,
@@ -66,7 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (active) setReady(true);
     });
     const unsub = Hub.listen("auth", ({ payload }) => {
-      if (payload.event === "signedIn" || payload.event === "signInWithRedirect") void refresh();
+      if (payload.event === "signedIn" || payload.event === "signInWithRedirect") {
+        void refresh();
+        void syncAuthProfile("login").catch(() => undefined);
+      }
       if (payload.event === "signedOut") setUser(null);
     });
     return () => {

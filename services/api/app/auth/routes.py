@@ -38,14 +38,21 @@ def create_auth_router(settings: Settings, auth: AuthService) -> APIRouter:
 
     @router.get('/me', response_model=Profile)
     def me(claims: dict = Depends(bearer_claims)):
-        return auth.me(claims)
+        try:
+            return auth.me(claims)
+        except PermissionError:
+            raise HTTPException(
+                403, detail={'code': 'forbidden', 'message': 'This account is disabled.'}
+            ) from None
 
     @router.post('/sync', response_model=Profile)
     def sync(body: SyncBody, claims: dict = Depends(bearer_claims)):
         try:
             return auth.sync_user(claims, event=body.event, display_name=body.display_name)
         except PermissionError:
-            raise HTTPException(403, detail={'code': 'forbidden', 'message': 'This account is disabled.'})
+            raise HTTPException(
+                403, detail={'code': 'forbidden', 'message': 'This account is disabled.'}
+            ) from None
 
     return router
 

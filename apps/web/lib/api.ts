@@ -49,6 +49,14 @@ async function request<T>(path: string, timeoutMs: number, init?: RequestInit, e
   }
 }
 export const getHealth = () => request<Health>("/health", 5_000);
+export const syncAuthProfile = (
+  event: "login" | "register" | "refresh" | "verify" | "password_reset",
+  displayName = "",
+) => request("/api/auth/sync", 10_000, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ event, display_name: displayName }),
+});
 export const sendChat = (message: string, agent: Agent, document?: DocumentRef | null, signal?: AbortSignal) => request<ChatResponse>("/api/chat", 65_000, {
   method: "POST", headers: { "Content-Type": "application/json", ...(document ? { "X-Document-Token": document.document_token } : {}) },
   body: JSON.stringify({ message, agent, ...(document ? { document_id: document.document_id } : {}) }),

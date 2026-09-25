@@ -71,6 +71,20 @@ def test_cross_document_and_missing_token_are_denied():
     assert result['citations'] == []
 
 
+def test_document_is_scoped_to_authenticated_owner():
+    store = DocumentStore()
+    upload = store.ingest(b'Private roadmap details.', 'roadmap.txt', owner_id='user-a')
+    result = store.answer(
+        upload['document_id'], upload['document_token'], 'roadmap', owner_id='user-a'
+    )
+    assert result['source_count'] == 1
+    with pytest.raises(ProviderError) as denied:
+        store.answer(
+            upload['document_id'], upload['document_token'], 'roadmap', owner_id='user-b'
+        )
+    assert denied.value.status == 404
+
+
 @pytest.mark.parametrize('data,name,code', [
     (b'', 'empty.txt', 'document_size'),
     (b'x' * (MAX_BYTES + 1), 'big.txt', 'document_size'),

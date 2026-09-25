@@ -4,15 +4,21 @@
 
 ## Current focus
 
-Production Cognito authentication on branch `feat/production-auth`, preserving the deployed workspace UI.
+Production Cognito authentication integrated with the Bedrock-hardening branch on
+`codex/auth-bedrock-integration`, preserving the deployed workspace UI. Local regression
+verification is complete; cloud deployment is pending a refreshed AWS CLI session.
 
 ## Auth
 
 - Email register → `/verify-email` → login
-- Google via Cognito Hosted UI (needs `NEXT_PUBLIC_COGNITO_DOMAIN` + IdP)
+- Google via Cognito Hosted UI (optional; hidden unless the domain, IdP and explicit
+  frontend flag are configured)
 - Forgot password → `/forgot-password`
-- Workspace gated by `AuthGate`; API gated by Cognito JWT when `AUTH_REQUIRED=true`
+- Workspace gated by `AuthGate`; every deployed application API requires a validated
+  Cognito JWT and checks disabled-account status
 - Registered users: Cognito Users console is source of truth
+- DynamoDB stores durable profiles and 90-day auth audit events; document evidence is
+  scoped to both Cognito subject and document token
 
 ## UI parity
 
@@ -23,8 +29,8 @@ Production Cognito authentication on branch `feat/production-auth`, preserving t
   grant. Model entitlement for `anthropic.claude-haiku-4-5` verified AUTHORIZED /
   AVAILABLE in `ap-south-1` without invoking. **Waiting on approval** for the first
   billable calls and for the alert email/budget amount; nothing paid has run.
-- Branches: neither `feat/production-baseline` nor `feat/bedrock-coding` is merged to
-  `main` (`origin/main` = `4e393fc`). Merge in that order; retire `codex/hackathon-mvp`.
+- Integration branch combines `feat/bedrock-coding` and `feat/production-auth`; it still
+  needs PR review/merge and deployment.
 
 ## Known Issues
 
@@ -35,13 +41,12 @@ Production Cognito authentication on branch `feat/production-auth`, preserving t
 - Rate limiter is per process; Lambda instances do not share counts.
 - Local venv is Python 3.14 while CI/deploy use 3.13.
 - `docker compose` build/run unverified. Frontend has no eslint.
-- `/login`, `/register` are UI previews only.
+- The live site still serves the pre-auth build until the integration deploy completes.
 
 ## Security Issues
 
-- Critical: no authentication; the public API can spend provider budget (mitigated by
-  edge throttle, per-client limiter, and paid providers being off). Fix: Phase 2 Cognito.
-- High: document access is token possession, not user ownership. Fix: Phase 2.
+- Resolved in the integration branch: fail-closed Cognito authentication and per-user
+  document ownership. The risk remains on the old live revision until deployment.
 - Medium: secrets as CloudFormation parameters → env vars. Fix: Phase 6 Secrets Manager.
 - Medium: no CSP on the static site. Fix: Phase 7.
 - Details and strengths: `docs/PRODUCTION_AUDIT.md`, `SECURITY.md`.
@@ -66,12 +71,11 @@ Production Cognito authentication on branch `feat/production-auth`, preserving t
 
 ## Tests
 
-- Backend: `python -m pytest -q` in `services/api` → 107 passed (2026-09-24, Phase 1
-  provider tests added; baseline was 89).
+- Backend: `python -m pytest services/api/tests -q` → 116 passed (2026-09-25).
 - Lint: `ruff check .` clean. `pip-audit -r requirements.txt --strict`: no known
   vulnerabilities.
-- Frontend: `npm run typecheck`, `npm run build` last passed on `d63429e` (no frontend
-  changes since). `npm audit` clean.
+- Frontend: `npm run typecheck` and `npm run build` passed on the integration branch;
+  registration, verification, recovery and guarded workspace routes are in the static build.
 - Not run this pass: SAM validate (CLI not installed locally; runs in CI), live cloud
   smoke against the new template.
 
@@ -91,10 +95,8 @@ Production Cognito authentication on branch `feat/production-auth`, preserving t
 
 ## Next Priority
 
-Phase 1 completion, gated on approval: (1) two bounded `check_bedrock --invoke` calls
-with `global.anthropic.claude-haiku-4-5-20251001-v1:0`; (2) deploy `Provider=bedrock`
-with `AlertEmail` + `MonthlyBudgetUsd` so the budget and alarms exist before public
-traffic reaches the model; (3) run the verification matrix through the deployed app
-(normal request, code explanation, debug request, larger request, failure path, fixture
-guard) and record results here. Production authentication is being integrated on
-`codex/auth-bedrock-integration`; the BrandMark/fluid-orb workspace is preserved.
+Push and review `codex/auth-bedrock-integration`, refresh the `nexusai` AWS login, deploy
+Cognito/Dynamo/API, rebuild Amplify with the stack's public auth outputs, and run the
+account/isolation smoke matrix. Enable Bedrock only with an alert email and approved
+budget, then run the bounded model verification matrix. The BrandMark/fluid-orb workspace
+is preserved.

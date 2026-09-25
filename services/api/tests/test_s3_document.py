@@ -52,3 +52,19 @@ def test_expired_document_is_not_returned(monkeypatch):
     with pytest.raises(ProviderError) as expired:
         S3DocumentStore('private-test', s3).answer(upload['document_id'], upload['document_token'], 'energy')
     assert expired.value.status == 404
+
+
+def test_s3_document_is_scoped_to_authenticated_owner():
+    s3 = FakeS3()
+    upload = S3DocumentStore('private-test', s3).ingest(
+        b'Private account evidence.', 'evidence.txt', owner_id='user-a'
+    )
+    other_instance = S3DocumentStore('private-test', s3)
+    assert other_instance.answer(
+        upload['document_id'], upload['document_token'], 'account', owner_id='user-a'
+    )['source_count'] == 1
+    with pytest.raises(ProviderError) as denied:
+        other_instance.answer(
+            upload['document_id'], upload['document_token'], 'account', owner_id='user-b'
+        )
+    assert denied.value.status == 404

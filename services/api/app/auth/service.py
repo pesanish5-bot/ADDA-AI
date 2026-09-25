@@ -49,11 +49,16 @@ class AuthService:
         user_id = str(claims['sub'])
         profile = self.store.get_profile(user_id)
         if profile:
+            if profile.get('status') == 'disabled':
+                raise PermissionError('Account disabled')
             return profile
         email = _claim_email(claims)
-        return self.store.upsert_profile(
+        profile = self.store.upsert_profile(
             user_id,
             email=email or f'{user_id}@unknown',
             display_name=_claim_name(claims),
             is_admin=email in self.settings.admin_email_set,
         )
+        if profile.get('status') == 'disabled':
+            raise PermissionError('Account disabled')
+        return profile

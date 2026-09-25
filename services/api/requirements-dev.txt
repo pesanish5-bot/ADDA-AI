@@ -7,10 +7,12 @@ boto3==1.43.98
 botocore==1.43.98
 cachecontrol==0.14.4
 certifi==2026.7.22
+cffi==1.17.1
 charset-normalizer==3.5.1
 click==8.5.0
 colorama==0.4.6
 cyclonedx-python-lib==11.12.0
+cryptography==44.0.2
 defusedxml==0.7.1
 distro==1.9.0
 fastapi==0.141.1
@@ -47,12 +49,14 @@ pip-requirements-parser==32.0.1
 platformdirs==4.11.12
 pluggy==1.6.0
 py-serializable==2.1.0
+pycparser==2.22
 pydantic==2.13.5
 pydantic-core==2.46.5
 pydantic-settings==2.15.0
 pygments==2.21.0
 pyparsing==3.3.3
 pypdf==6.19.0
+PyJWT==2.10.1
 pytest==9.1.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.3

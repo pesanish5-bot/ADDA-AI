@@ -23,6 +23,7 @@ class AgentState(TypedDict):
     plan: list[str]
     collection: dict
     usage: dict | None
+    user_id: str
 
 
 def select_agent(message: str, requested_agent: str, document_id: str | None = None) -> tuple[str, str]:
@@ -140,7 +141,10 @@ def build_graph(provider: CodingProvider, documents: DocumentStore | None = None
                     'duration_ms': round((perf_counter() - started) * 1000),
                 }],
             }
-        result = documents.answer(state['document_id'], state.get('document_token', ''), state['message'])
+        result = documents.answer(
+            state['document_id'], state.get('document_token', ''), state['message'],
+            owner_id=state.get('user_id', ''),
+        )
         return {'answer': result['answer'], 'citations': result['citations'], 'provider': 'extractive',
                 'activity': state['activity'] + [{'step': 'Document retrieval', 'status': 'completed',
                 'detail': f"Retrieved {result['source_count']} page passages using local keyword matching.",
@@ -156,7 +160,8 @@ def build_graph(provider: CodingProvider, documents: DocumentStore | None = None
     def research_collect(state: AgentState):
         started = perf_counter()
         collection = collect_research(state['message'], state['plan'], documents,
-                                      state.get('document_id'), state.get('document_token', ''), search_provider)
+                                      state.get('document_id'), state.get('document_token', ''),
+                                      search_provider, owner_id=state.get('user_id', ''))
         return {'collection': collection, 'activity': state['activity'] + [{
             'step': 'Collect evidence', 'status': 'completed',
             'detail': f"Completed {len(collection['checks'])} retrieval checks; {len(collection['citations'])} distinct sources/passages.",

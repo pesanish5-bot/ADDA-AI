@@ -118,7 +118,9 @@ def test_production_requires_https_origins_and_model_id():
 def test_production_with_explicit_fixture_flag_starts_and_hides_docs():
     app = create_app(Settings(_env_file=None, app_env='production', nexus_provider='demo',
                               allow_demo_fixture=True, allowed_origins='https://app.example.com',
-                              document_enabled=False))
+                              document_enabled=False, auth_required=True,
+                              cognito_user_pool_id='ap-south-1_example',
+                              cognito_client_id='client-id', auth_profiles_table='profiles'))
     client = TestClient(app)
     assert client.get('/docs').status_code == 404
     assert client.get('/openapi.json').status_code == 404
@@ -149,3 +151,20 @@ def test_ready_reports_checks(monkeypatch):
 def test_development_warns_but_runs_with_fixture():
     warnings = Settings(_env_file=None, nexus_provider='demo').validate_for_environment()
     assert any('fixture' in w for w in warnings)
+
+
+def test_auth_required_fails_closed_when_provider_is_missing():
+    with pytest.raises(ConfigurationError, match='AUTH_REQUIRED'):
+        Settings(_env_file=None, auth_required=True).validate_for_environment()
+
+
+def test_staging_rejects_guest_mode_and_ephemeral_profiles():
+    with pytest.raises(ConfigurationError, match='AUTH_REQUIRED'):
+        Settings(
+            _env_file=None,
+            app_env='staging',
+            nexus_provider='bedrock',
+            bedrock_model_id='model',
+            allowed_origins='https://app.example.com',
+            auth_required=False,
+        ).validate_for_environment()

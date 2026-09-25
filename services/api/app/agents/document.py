@@ -64,6 +64,7 @@ class _Document:
     pages: int
     chunks: tuple[tuple[int, str], ...]
     expires: float
+    owner_id: str = ''
 
 
 class DocumentStore:
@@ -86,7 +87,7 @@ class DocumentStore:
         lzw_maximum_output_length=MAX_STREAM_BYTES,
         run_length_maximum_output_length=MAX_STREAM_BYTES,
     )
-    def ingest(self, data: bytes, filename: str) -> dict:
+    def ingest(self, data: bytes, filename: str, owner_id: str = '') -> dict:
         if not data or len(data) > MAX_BYTES:
             raise ProviderError('Upload a nonempty file no larger than 5 MB.', 'document_size', 413)
         # The filename is display metadata only, never a filesystem path.
@@ -151,27 +152,31 @@ class DocumentStore:
             if len(self._documents) >= self.max_documents:
                 raise ProviderError('Document storage is full. Remove a document or try after existing uploads expire.', 'document_capacity', 503)
             document_id, token = secrets.token_urlsafe(18), secrets.token_urlsafe(32)
-            self._documents[document_id] = _Document(token, filename, len(pages), tuple(chunks), time.monotonic() + self.ttl_seconds)
+            self._documents[document_id] = _Document(
+                token, filename, len(pages), tuple(chunks),
+                time.monotonic() + self.ttl_seconds, owner_id,
+            )
         return {'document_id': document_id, 'document_token': token, 'filename': filename,
                 'pages': len(pages), 'chunks': len(chunks)}
 
-    def _get(self, document_id: str, token: str) -> _Document:
+    def _get(self, document_id: str, token: str, owner_id: str = '') -> _Document:
         self._purge()
         document = self._documents.get(document_id)
         expected = document.token if document else 'missing-document-token'
         valid = secrets.compare_digest(expected.encode(), (token or '').encode())
-        if not document or not valid:
+        owner_matches = not owner_id or (document is not None and document.owner_id == owner_id)
+        if not document or not valid or not owner_matches:
             raise ProviderError('Document unavailable or expired. Upload it again.', 'document_not_found', 404)
         return document
 
-    def delete(self, document_id: str, document_token: str) -> None:
+    def delete(self, document_id: str, document_token: str, owner_id: str = '') -> None:
         with self._lock:
-            self._get(document_id, document_token)
+            self._get(document_id, document_token, owner_id)
             del self._documents[document_id]
 
-    def answer(self, document_id: str, document_token: str, query: str) -> dict:
+    def answer(self, document_id: str, document_token: str, query: str, owner_id: str = '') -> dict:
         with self._lock:
-            document = self._get(document_id, document_token)
+            document = self._get(document_id, document_token, owner_id)
         query_terms = _terms(query)
         summary = bool(re.search(r'\b(summar(?:y|ize|ise)|overview|main findings|key points)\b', query.lower()))
         counters = [_terms(text) for _, text in document.chunks]
