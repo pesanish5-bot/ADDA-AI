@@ -4,9 +4,10 @@
 
 ## Current focus
 
-Production Cognito authentication integrated with the Bedrock-hardening branch on
-`codex/auth-bedrock-integration`, preserving the workspace UI. The protected AWS stack
-and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
+Production Cognito authentication and durable task history are integrated with the
+Bedrock-hardening branch on `codex/auth-bedrock-integration`, preserving the workspace
+UI. The protected AWS stack and Amplify frontend were updated on 2026-09-27; PR
+review/merge remains.
 
 ## Auth
 
@@ -17,8 +18,8 @@ and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
 - Workspace gated by `AuthGate`; every deployed application API requires a validated
   Cognito JWT and checks disabled-account status
 - Registered users: Cognito Users console is source of truth
-- DynamoDB stores durable profiles and 90-day auth audit events; document evidence is
-  scoped to both Cognito subject and document token
+- DynamoDB stores durable profiles, a maximum of 100 tasks per account and 90-day auth
+  audit events; document evidence is scoped to both Cognito subject and document token
 
 ## UI parity
 
@@ -29,8 +30,12 @@ and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
   grant. Claude Haiku 4.5 reported entitled but denied actual inference. APAC Amazon Nova
   Lite passed two bounded live calls (103 input tokens each; 65/111 output tokens) and is
   deployed with a $10 monthly budget and API/Bedrock alarms.
-- Integration branch combines `feat/bedrock-coding` and `feat/production-auth`; it still
-  needs PR review/merge and deployment.
+- Integration branch combines `feat/bedrock-coding` and `feat/production-auth`; it is
+  deployed and still needs PR review/merge.
+- Private task history now syncs across sessions, with Archive, restore and confirmed
+  permanent deletion. The activity panel shows model, token total, model time and retry
+  attempts when the provider returns usage metadata. Rare UI attribution and third-party
+  notices are included.
 
 ## Known Issues
 
@@ -54,32 +59,35 @@ and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (job 14 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
-  manual light/dark modes and five persistent accent choices. URL https://main.dvhyzvzxczywv.amplifyapp.com/
-- API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-25),
+  (job 15 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  manual light/dark modes, five persistent accent choices, private history and Archive.
+  URL https://main.dvhyzvzxczywv.amplifyapp.com/
+- API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-27),
   HTTP API `pqrxb30pg5`, Lambda Python 3.13, Cognito user pool, encrypted/PITR DynamoDB
-  profiles and private S3 documents bucket (1-day lifecycle). Running integration branch
+  profiles/task history and private S3 documents bucket (1-day lifecycle). Running integration branch
   with `AppEnv=staging`, `Provider=bedrock`, APAC Nova Lite, `AUTH_REQUIRED=true`,
   `DemoAccessToken=""` and a $10 monthly budget.
   Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
   Deploy path: `python scripts/build_lambda_package.py` → `aws cloudformation package`
   → `aws cloudformation deploy` (see OPERATIONS.md). No Docker or SAM CLI needed.
-- Live verification after auth deploy: `/health` reports Cognito configured/required;
-  `/ready` → 200; anonymous chat → 401; live root/login/register/recovery → 200; deployed
-  bundles contain the generated pool/client/API identifiers; Amplify-origin CORS is correct.
-  Real email delivery and an authenticated cross-user document smoke test remain pending.
+- Live verification after history deploy: `/health` reports Cognito configured/required;
+  `/ready` → 200; anonymous history → 401; live root/login/register/recovery → 200; deployed
+  bundles contain the Archive, history-sync, usage and attribution UI. Automated tests cover
+  cross-user task isolation. An authenticated live history/archive click-through and
+  cross-user document smoke test remain pending.
 - Target architecture (ADRs 0001–0005): ECS Fargate, Postgres + pgvector, Cognito, SQS
   worker. Nothing provisioned yet; all require approval (recurring cost).
 
 ## Tests
 
-- Backend: `python -m pytest services/api/tests -q` → 116 passed (2026-09-25).
+- Backend: `python -m pytest services/api/tests -q` → 119 passed (2026-09-27).
 - Lint: `ruff check .` clean. `pip-audit -r requirements.txt --strict`: no known
   vulnerabilities.
 - Frontend: `npm run typecheck` and `npm run build` passed on the integration branch;
-  registration, verification, recovery and guarded workspace routes are in the static build.
-- Not run this pass: SAM validate (CLI not installed locally; runs in CI), live cloud
-  smoke against the new template.
+  registration, verification, recovery, guarded workspace, history and Archive are in the
+  static build.
+- CI passed API, web and SAM lint checks. Local SAM CLI is not installed. Live cloud
+  health/readiness, anonymous history rejection and public route/bundle checks passed.
 
 ## External Services
 
@@ -98,6 +106,8 @@ and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
 
 ## Next Priority
 
-Confirm the AWS SNS subscription email, run an authenticated browser Coding request and
-the cross-user document isolation matrix, then review/merge PR #6. Configure production
-SES before declaring production. The BrandMark/fluid-orb workspace is preserved.
+Run an authenticated browser history/archive smoke test and the cross-user document
+isolation matrix, confirm the AWS SNS subscription email, then review/merge PR #6.
+Configure production SES before declaring production. The next product slice is a model
+catalog/router with server-side allowlists, per-model budgets and graceful fallback—not
+an unbounded list of every free model.

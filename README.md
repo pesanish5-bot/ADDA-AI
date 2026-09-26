@@ -6,7 +6,7 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 
 | Capability | Implemented behavior | Verification |
 | --- | --- | --- |
-| Workspace | Task history for the current page session, upload, citation cards, code highlighting/copy and completed activity | Local browser, types and production build checked |
+| Workspace | Private per-account task history (bounded to 100), Archive/restore/delete, upload, citation cards, code highlighting/copy, model usage and completed activity | API isolation tests, types, production build and staging deploy checked |
 | Coding | LangGraph route to Amazon Bedrock Converse with bounded output/retries | Nova Lite verified with two live requests and deployed |
 | Documents | PDF/TXT upload, local keyword retrieval and page-cited excerpts | Local API tests and browser flow verified |
 | Research | LangGraph plan → two evidence checks → cited extractive brief | Attached-document workflow verified locally |
@@ -16,13 +16,13 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 The `/login/`, `/register/`, `/verify-email/` and `/forgot-password/` flows use Amazon
 Cognito when configured. The workspace and application APIs require a signed Cognito
 session in deployed environments. The infrastructure template provisions the user pool,
-public web client and durable DynamoDB profiles; optional Google federation requires a
+public web client and durable DynamoDB profiles/task history; optional Google federation requires a
 separate Google OAuth client and is off by default.
 
 Documents and document Research work without an API key. They use real source text, **not embeddings or language-model synthesis**. Default Coding mode is `demo`: its answer is a fixed connection-test fixture, not generated code. Live provider errors never silently fall back to that fixture.
 
 **Maturity: authenticated staging / production-hardening in progress.** Authentication,
-request controls, durable profiles and per-user document isolation are deployed and
+request controls, durable profiles/history and per-user document isolation are deployed and
 smoke-tested on the published AWS environment. Registration/email verification and two
 bounded Bedrock Nova Lite calls are verified. A restore drill and remaining production
 controls are still required.

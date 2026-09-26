@@ -92,7 +92,8 @@ Completion: no high findings in a second review; headers verified with an extern
 
 Objective: maintainable UI with real auth state.
 Tasks: eslint config; split `page.tsx` into components/hooks; error boundaries; auth
-context; persistent history from API; accessibility pass; Playwright smoke tests in CI.
+context; persistent history from API (**implemented on staging 2026-09-27**); accessibility
+pass; Playwright smoke tests in CI.
 Completion: lint in CI; Playwright covers login → chat → upload → cite.
 
 ## Phase 9 — Performance and reliability
