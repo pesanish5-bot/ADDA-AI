@@ -54,7 +54,8 @@ and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (job 13 SUCCEED on 2026-09-25). URL https://main.dvhyzvzxczywv.amplifyapp.com/
+  (job 14 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  manual light/dark modes and five persistent accent choices. URL https://main.dvhyzvzxczywv.amplifyapp.com/
 - API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-25),
   HTTP API `pqrxb30pg5`, Lambda Python 3.13, Cognito user pool, encrypted/PITR DynamoDB
   profiles and private S3 documents bucket (1-day lifecycle). Running integration branch
