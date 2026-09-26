@@ -36,7 +36,8 @@ Objective: real users, their data stored durably and isolated.
 Tasks: Cognito pool (ADR-0003); PKCE login in the static frontend; JWT dependency in
 FastAPI; Postgres via Aurora Serverless v2 or RDS (ADR-0002) with SQLAlchemy + Alembic;
 tables `users`, `conversations`, `messages`, `documents`, `research_jobs`; document
-ownership replaces bearer tokens for signed-in users; per-user quotas; account deletion
+ownership replaces bearer tokens for signed-in users; per-user quotas (**implemented on
+staging with atomic DynamoDB daily/monthly windows on 2026-09-27**); account deletion
 cascade; retention policy (documents 30 days default, configurable).
 Dependencies: VPC, Secrets Manager (paid resources: approve first).
 Completion: two users cannot see each other's conversations or documents (tests);

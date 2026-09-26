@@ -1,6 +1,6 @@
 # AWS deployment
 
-## Current demo (20 September 2026)
+## Current staging deployment (27 September 2026)
 
 - Frontend: https://main.dvhyzvzxczywv.amplifyapp.com/
 - API: https://pqrxb30pg5.execute-api.ap-south-1.amazonaws.com
@@ -8,10 +8,12 @@
 - Provider: `bedrock` for Coding using `apac.amazon.nova-lite-v1:0`. Search uses a backend-only Tavily key. Documents and
   Research use real extracted evidence. Cognito authentication is mandatory for workspace
   API routes; no shared demo token is configured.
-- Verified on the published revision (Amplify job 16): health/readiness, anonymous
+- Verified on the published revision (Amplify job 17): health/readiness, anonymous
   request 401, frontend root/login/register/recovery routes, adaptive appearance,
-  Archive/history/usage, full-page logo refresh and the verified model-selector bundle.
-  An authenticated live history/archive click-through is still required.
+  Archive/history, daily/monthly usage UI, full-page logo refresh and the verified
+  model-selector bundle. Durable quota isolation and exact token accumulation were checked
+  with automated tests and a temporary live DynamoDB record that was removed afterward.
+  An authenticated live usage/history/archive click-through is still required.
 
 The static Next.js frontend can be hosted on AWS Amplify Hosting. The FastAPI backend runs in Lambda behind API Gateway HTTP API using the SAM template in `infra/template.yaml`. The backend's extracted PDF evidence is stored in a private S3 bucket with a one-day lifecycle rule. The bucket is retained if the stack is deleted, so remove it separately when retiring the demo.
 
@@ -52,6 +54,15 @@ reported entitlement but returned access denied, so it is not exposed. APAC prof
 route within their listed APAC regions.
 
 Per-request limits: `BEDROCK_MAX_TOKENS` (default 1500), read timeout 20 s, at most 2 attempts (retry only on throttling/transient errors), 12,000-character prompt cap, per-client rate limit 20 chat requests/min, API Gateway throttle 2 rps.
+
+Per-account Bedrock Coding limits default to 25 requests/50,000 tokens per UTC day and
+250 requests/500,000 tokens per UTC month. Configure them with
+`ModelDailyRequestLimit`, `ModelDailyTokenLimit`, `ModelMonthlyRequestLimit` and
+`ModelMonthlyTokenLimit`. The API reserves request counts atomically in DynamoDB before
+calling Bedrock and records the provider's exact token counts afterward. A response that
+starts below a token ceiling may cross it by at most that bounded request; the next call
+is rejected with HTTP 429. Failed provider attempts retain their request reservation.
+Search, document retrieval and extractive Research are not counted as model usage.
 
 The Lambda stores extracted chunks, not source PDFs. A document session requires the opaque document token returned by upload; S3 evidence expires after one day. The shared demo access token still permits any holder to call the API. Do not use this design for private multi-user accounts.
 

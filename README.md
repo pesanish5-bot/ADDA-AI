@@ -6,7 +6,7 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 
 | Capability | Implemented behavior | Verification |
 | --- | --- | --- |
-| Workspace | Private per-account task history (bounded to 100), Archive/restore/delete, upload, citation cards, code highlighting/copy, model usage and completed activity | API isolation tests, types, production build and staging deploy checked |
+| Workspace | Private per-account task history (bounded to 100), Archive/restore/delete, upload, citation cards, code highlighting/copy, and daily/monthly model usage | API isolation/quota tests, types, production build and staging deploy checked |
 | Coding | LangGraph route to a server-controlled Amazon Bedrock model catalog with automatic/manual routing, bounded output and retries | Nova Micro, Lite and Pro verified with live requests and deployed |
 | Documents | PDF/TXT upload, local keyword retrieval and page-cited excerpts | Local API tests and browser flow verified |
 | Research | LangGraph plan → two evidence checks → cited extractive brief | Attached-document workflow verified locally |
@@ -22,10 +22,10 @@ separate Google OAuth client and is off by default.
 Documents and document Research work without an API key. They use real source text, **not embeddings or language-model synthesis**. Default Coding mode is `demo`: its answer is a fixed connection-test fixture, not generated code. Live provider errors never silently fall back to that fixture.
 
 **Maturity: authenticated staging / production-hardening in progress.** Authentication,
-request controls, durable profiles/history and per-user document isolation are deployed and
-smoke-tested on the published AWS environment. Registration/email verification and two
-bounded Bedrock Nova Lite calls are verified. A restore drill and remaining production
-controls are still required.
+request controls, durable profiles/history, per-user document isolation and atomic
+per-user model quotas are deployed and smoke-tested on the published AWS environment.
+Registration/email verification and bounded Bedrock calls are verified. A restore drill
+and remaining production controls are still required.
 [PROJECT_STATUS.md](PROJECT_STATUS.md) is the source of truth.
 
 Documentation set:
@@ -77,6 +77,13 @@ frontend needs the API URL plus the public Cognito pool/client identifiers. Neve
 AWS/provider secrets in public frontend variables.
 
 Uploads accept PDF or UTF-8 TXT up to 5 MB, with PDFs capped at 30 pages. Extracted text and PDF decompression are additionally bounded. The deployed Lambda stores document evidence in private S3 with a one-day lifecycle; local development uses bounded process memory. Each document remains owner-scoped. Task history is stored per account in DynamoDB and bounded to 100 records; prompts are still independent, not a conversation-memory system.
+
+Authenticated Bedrock Coding is limited per account to 25 requests and 50,000 tokens per
+UTC day, and 250 requests and 500,000 tokens per UTC month. Request reservations are
+atomic across Lambda instances; exact provider token counts are recorded after successful
+responses. The account menu displays both periods and their reset times. Search and
+document retrieval do not consume this model allowance. These are safety limits, not a
+paid subscription or billing system.
 
 The Lambda template stores documents in a private S3 bucket with one-day expiry so separate instances share them. No vector database, embeddings, OCR or generated-code execution is implemented; see the roadmap.
 

@@ -6,8 +6,8 @@
 
 Production Cognito authentication and durable task history are integrated with the
 Bedrock-hardening branch on `codex/auth-bedrock-integration`, preserving the workspace
-UI. The protected AWS stack and Amplify frontend were updated on 2026-09-27; PR
-review/merge remains.
+UI. Durable per-user Bedrock usage limits are also live. The protected AWS stack and
+Amplify frontend were updated on 2026-09-27; PR review/merge remains.
 
 ## Auth
 
@@ -40,14 +40,20 @@ review/merge remains.
   passed two bounded live calls. The API resolves public aliases through a fixed allowlist;
   clients cannot submit arbitrary Bedrock IDs. Clicking the ADDA AI logo performs a full
   page refresh.
+- Bedrock Coding usage is isolated by Cognito subject and persisted in atomic DynamoDB
+  daily/monthly windows. The account menu shows requests, tokens and UTC reset times.
+  Current limits are 25 requests/50,000 tokens daily and 250 requests/500,000 tokens
+  monthly. Search, documents and extractive Research do not consume that allowance.
 
 ## Known Issues
 
 - Coding uses Bedrock (`apac.amazon.nova-lite-v1:0`). The SNS alarm subscription is pending
   recipient confirmation at `pesanish5@gmail.com`.
-- Documents in memory are capped at 10 globally on the container path (set
-  `DOCUMENT_BUCKET` for anything shared).
+- Local-development documents in memory are capped at 10 globally; staging uses the
+  configured private S3 bucket.
 - Rate limiter is per process; Lambda instances do not share counts.
+- Exact token totals are available only after Bedrock replies, so one bounded response can
+  cross a token ceiling; the next model request is rejected. Request limits remain atomic.
 - Local venv is Python 3.14 while CI/deploy use 3.13.
 - `docker compose` build/run unverified. Frontend has no eslint.
 - The new Three.js component from `main` is present but is not mounted by a page yet;
@@ -63,29 +69,31 @@ review/merge remains.
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (job 16 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  (job 17 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
   manual light/dark modes, five persistent accent choices, private history, Archive and
-  the verified model selector.
+  the verified model selector, plus daily/monthly account usage.
   URL https://main.dvhyzvzxczywv.amplifyapp.com/
 - API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-27),
   HTTP API `pqrxb30pg5`, Lambda Python 3.13, Cognito user pool, encrypted/PITR DynamoDB
   profiles/task history and private S3 documents bucket (1-day lifecycle). Running integration branch
   with `AppEnv=staging`, `Provider=bedrock`, APAC Nova Lite, `AUTH_REQUIRED=true`,
-  `DemoAccessToken=""` and a $10 monthly budget.
+  `DemoAccessToken=""`, durable usage limits and a $10 monthly budget.
   Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
   Deploy path: `python scripts/build_lambda_package.py` → `aws cloudformation package`
   → `aws cloudformation deploy` (see OPERATIONS.md). No Docker or SAM CLI needed.
-- Live verification after history deploy: `/health` reports Cognito configured/required;
+- Live verification after quota deploy: `/health` reports Cognito configured/required;
   `/ready` → 200; anonymous history → 401; live root/login/register/recovery → 200; deployed
   bundles contain the Archive, history-sync, usage and attribution UI. Automated tests cover
-  cross-user task isolation. An authenticated live history/archive click-through and
-  cross-user document smoke test remain pending.
+  cross-user task and quota isolation. A temporary live DynamoDB smoke record confirmed
+  atomic daily/monthly request and exact token accumulation and was then deleted. An
+  authenticated live usage/history/archive click-through and cross-user document smoke
+  test remain pending.
 - Target architecture (ADRs 0001–0005): ECS Fargate, Postgres + pgvector, Cognito, SQS
   worker. Nothing provisioned yet; all require approval (recurring cost).
 
 ## Tests
 
-- Backend: `python -m pytest services/api/tests -q` → 129 passed in CI (2026-09-27).
+- Backend: `python -m pytest services/api/tests -q` → 137 passed (2026-09-27).
 - Lint: `ruff check .` clean. `pip-audit -r requirements.txt --strict`: no known
   vulnerabilities.
 - Frontend: `npm run typecheck` and `npm run build` passed on the integration branch;
@@ -112,8 +120,8 @@ review/merge remains.
 
 ## Next Priority
 
-Run an authenticated browser history/archive smoke test and the cross-user document
+Run an authenticated browser usage/history/archive smoke test and the cross-user document
 isolation matrix, confirm the AWS SNS subscription email, then review/merge PR #6.
-Configure production SES before declaring production. The next product slice is durable
-per-user usage metering and quotas, followed by graceful automatic-model fallback—not an
-unbounded list of every free model.
+Configure production SES before declaring production. The next product slice is graceful
+automatic-model fallback and a carefully priced subscription design; payment processing,
+plan entitlements, invoices, refunds and legal terms are not implemented yet.
