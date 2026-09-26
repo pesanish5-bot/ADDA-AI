@@ -36,6 +36,10 @@ review/merge remains.
   permanent deletion. The activity panel shows model, token total, model time and retry
   attempts when the provider returns usage metadata. Rare UI attribution and third-party
   notices are included.
+- Coding now offers Automatic, Nova Micro, Nova Lite and Nova Pro. All three model tiers
+  passed two bounded live calls. The API resolves public aliases through a fixed allowlist;
+  clients cannot submit arbitrary Bedrock IDs. Clicking the ADDA AI logo performs a full
+  page refresh.
 
 ## Known Issues
 
@@ -59,8 +63,9 @@ review/merge remains.
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (job 15 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
-  manual light/dark modes, five persistent accent choices, private history and Archive.
+  (job 16 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  manual light/dark modes, five persistent accent choices, private history, Archive and
+  the verified model selector.
   URL https://main.dvhyzvzxczywv.amplifyapp.com/
 - API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-27),
   HTTP API `pqrxb30pg5`, Lambda Python 3.13, Cognito user pool, encrypted/PITR DynamoDB
@@ -80,14 +85,15 @@ review/merge remains.
 
 ## Tests
 
-- Backend: `python -m pytest services/api/tests -q` → 119 passed (2026-09-27).
+- Backend: `python -m pytest services/api/tests -q` → 129 passed in CI (2026-09-27).
 - Lint: `ruff check .` clean. `pip-audit -r requirements.txt --strict`: no known
   vulnerabilities.
 - Frontend: `npm run typecheck` and `npm run build` passed on the integration branch;
   registration, verification, recovery, guarded workspace, history and Archive are in the
   static build.
 - CI passed API, web and SAM lint checks. Local SAM CLI is not installed. Live cloud
-  health/readiness, anonymous history rejection and public route/bundle checks passed.
+  health/readiness, the three-model catalog, anonymous request rejection and public
+  route/bundle checks passed.
 
 ## External Services
 
@@ -108,6 +114,6 @@ review/merge remains.
 
 Run an authenticated browser history/archive smoke test and the cross-user document
 isolation matrix, confirm the AWS SNS subscription email, then review/merge PR #6.
-Configure production SES before declaring production. The next product slice is a model
-catalog/router with server-side allowlists, per-model budgets and graceful fallback—not
-an unbounded list of every free model.
+Configure production SES before declaring production. The next product slice is durable
+per-user usage metering and quotas, followed by graceful automatic-model fallback—not an
+unbounded list of every free model.

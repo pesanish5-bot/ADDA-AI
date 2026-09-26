@@ -8,9 +8,9 @@
 - Provider: `bedrock` for Coding using `apac.amazon.nova-lite-v1:0`. Search uses a backend-only Tavily key. Documents and
   Research use real extracted evidence. Cognito authentication is mandatory for workspace
   API routes; no shared demo token is configured.
-- Verified on the published revision (Amplify job 15): health/readiness, anonymous
-  history 401, frontend root/login/register/recovery routes, adaptive appearance,
-  Archive/history/usage bundles, embedded Cognito configuration and CORS.
+- Verified on the published revision (Amplify job 16): health/readiness, anonymous
+  request 401, frontend root/login/register/recovery routes, adaptive appearance,
+  Archive/history/usage, full-page logo refresh and the verified model-selector bundle.
   An authenticated live history/archive click-through is still required.
 
 The static Next.js frontend can be hosted on AWS Amplify Hosting. The FastAPI backend runs in Lambda behind API Gateway HTTP API using the SAM template in `infra/template.yaml`. The backend's extracted PDF evidence is stored in a private S3 bucket with a one-day lifecycle rule. The bucket is retained if the stack is deleted, so remove it separately when retiring the demo.
@@ -45,10 +45,11 @@ sam deploy --guided --template-file .aws-sam/build/template.yaml
 3. Deploy with `Provider=bedrock BedrockModelId=apac.amazon.nova-lite-v1:0 AlertEmail=<ops email> MonthlyBudgetUsd=<amount>`. `AlertEmail` creates the SNS topic, AWS Budget (50/80/100 % actual, 100 % forecast) and the Lambda/Bedrock alarms; confirm the SNS subscription email.
 4. Verify through the application: `/health` shows `provider: bedrock` and the model; a browser Coding request returns `provider: bedrock` with `usage.input_tokens/output_tokens`; CloudWatch access log shows `model`, token counts and `provider_latency_ms`.
 
-Model choice: APAC Amazon Nova Lite is the verified cost-conscious default. Claude Haiku
-4.5 reported entitlement but returned access denied during live verification, so it is not
-used. Add other models only through a tested server-side allowlist with separate cost and
-latency limits. APAC profiles may route within their listed APAC regions.
+Model choice: Automatic routes among the live-verified APAC Amazon Nova Micro, Lite and
+Pro profiles. Nova Lite remains the configured fallback/default. Public choices are fixed
+server-side aliases, and arbitrary model IDs are rejected. Claude Haiku 4.5 previously
+reported entitlement but returned access denied, so it is not exposed. APAC profiles may
+route within their listed APAC regions.
 
 Per-request limits: `BEDROCK_MAX_TOKENS` (default 1500), read timeout 20 s, at most 2 attempts (retry only on throttling/transient errors), 12,000-character prompt cap, per-client rate limit 20 chat requests/min, API Gateway throttle 2 rps.
 

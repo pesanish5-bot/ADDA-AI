@@ -7,7 +7,7 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 | Capability | Implemented behavior | Verification |
 | --- | --- | --- |
 | Workspace | Private per-account task history (bounded to 100), Archive/restore/delete, upload, citation cards, code highlighting/copy, model usage and completed activity | API isolation tests, types, production build and staging deploy checked |
-| Coding | LangGraph route to Amazon Bedrock Converse with bounded output/retries | Nova Lite verified with two live requests and deployed |
+| Coding | LangGraph route to a server-controlled Amazon Bedrock model catalog with automatic/manual routing, bounded output and retries | Nova Micro, Lite and Pro verified with live requests and deployed |
 | Documents | PDF/TXT upload, local keyword retrieval and page-cited excerpts | Local API tests and browser flow verified |
 | Research | LangGraph plan → two evidence checks → cited extractive brief | Attached-document workflow verified locally |
 | Search | Tavily adapter with bounded results, optional Tavily summary, and real source URLs | Live Search verified on the canonical local API when `TAVILY_API_KEY` is set |
@@ -76,15 +76,17 @@ Every response carries `X-Request-ID`, and `GET /ready` reports dependency check
 frontend needs the API URL plus the public Cognito pool/client identifiers. Never put
 AWS/provider secrets in public frontend variables.
 
-Uploads accept PDF or UTF-8 TXT up to 5 MB, with PDFs capped at 30 pages. Extracted text and PDF decompression are additionally bounded. Documents live in one API process for up to one hour, at most ten documents, and disappear on restart. Each document requires its separate secret token for retrieval and deletion. There is no durable storage or multi-instance document support. Browser task history is memory-only; prompts are independent, not a conversation-memory system.
+Uploads accept PDF or UTF-8 TXT up to 5 MB, with PDFs capped at 30 pages. Extracted text and PDF decompression are additionally bounded. The deployed Lambda stores document evidence in private S3 with a one-day lifecycle; local development uses bounded process memory. Each document remains owner-scoped. Task history is stored per account in DynamoDB and bounded to 100 records; prompts are still independent, not a conversation-memory system.
 
 The Lambda template stores documents in a private S3 bucket with one-day expiry so separate instances share them. No vector database, embeddings, OCR or generated-code execution is implemented; see the roadmap.
 
 ## Live services
 
-Follow [AWS setup](docs/AWS_SETUP.md). The deployed Coding provider is the APAC Amazon
-Nova Lite inference profile. Two bounded live Converse calls were verified before the
-switch. The configured $10 monthly budget and alarms are active; the SNS email subscription
+Follow [AWS setup](docs/AWS_SETUP.md). The deployed Coding provider exposes verified
+APAC Amazon Nova Micro, Lite and Pro inference profiles through server-owned aliases.
+Automatic routing favors Micro for short/simple work, Lite for normal work and Pro for
+complex production/security/architecture prompts. Arbitrary model IDs are rejected.
+The configured $10 monthly budget and alarms remain active; the SNS email subscription
 must be confirmed by its recipient.
 
 `TAVILY_API_KEY` enables Search and web Research. Put it only in `services/api/.env`, then restart the API. Do not put it in `apps/web/.env.local`. On the canonical pair (`127.0.0.1:3000` → `127.0.0.1:8000`) Search is live when `/health` reports `capabilities.search: true`. Search asks Tavily for at most five basic results plus a provider summary, and lists only HTTP(S) URLs Tavily returned. It does not independently read or verify full source pages. Health reports configuration/capabilities, while each chat response labels its actual provider (`demo`, `bedrock`, `extractive` or `tavily`). Health alone never proves Bedrock access.
