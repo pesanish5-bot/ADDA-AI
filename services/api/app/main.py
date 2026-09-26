@@ -46,7 +46,8 @@ def create_app(
         log_event('configuration warning', logging.WARNING, warning=warning)
 
     documents = S3DocumentStore(settings.document_bucket) if settings.document_bucket else DocumentStore()
-    graph = build_graph(provider or CodingProvider(settings), documents)
+    coding_provider = provider or CodingProvider(settings)
+    graph = build_graph(coding_provider, documents)
     auth = auth_service or AuthService(settings)
     tasks = task_store or (
         DynamoTaskStore(settings.auth_profiles_table, settings.cognito_pool_region)
@@ -140,6 +141,7 @@ def create_app(
         return {'status': 'ok', 'environment': settings.app_env, 'version': settings.app_version,
                 'provider': settings.nexus_provider,
                 'model': settings.bedrock_model_id if settings.nexus_provider == 'bedrock' else None,
+                'models': coding_provider.model_options(),
                 'auth': {
                     'configured': settings.auth_configured,
                     'provider': 'cognito' if settings.cognito_configured else (
@@ -244,8 +246,10 @@ def create_app(
         request_id = current_request_id()
         if body.document_id and not settings.document_enabled:
             raise ProviderError('Document storage is unavailable in this deployment.', 'documents_disabled', 503)
-        annotate(route='chat', requested_agent=body.agent, has_document=bool(body.document_id))
+        annotate(route='chat', requested_agent=body.agent, requested_model=body.model,
+                 has_document=bool(body.document_id))
         state = graph.invoke({'message': body.message, 'requested_agent': body.agent,
+                              'requested_model': body.model,
                               'agent': '', 'answer': '', 'activity': [], 'citations': [],
                               'document_id': body.document_id, 'document_token': x_document_token,
                               'provider': settings.nexus_provider, 'plan': [], 'collection': {},

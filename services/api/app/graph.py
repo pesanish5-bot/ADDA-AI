@@ -13,6 +13,7 @@ from app.providers import CodingProvider, ProviderError
 class AgentState(TypedDict):
     message: str
     requested_agent: str
+    requested_model: str
     agent: str
     answer: str
     activity: list[dict]
@@ -88,7 +89,7 @@ def build_graph(provider: CodingProvider, documents: DocumentStore | None = None
 
     def coding(state: AgentState):
         started = perf_counter()
-        generation = provider.generate(state['message'])
+        generation = provider.generate(state['message'], model=state['requested_model'])
         if generation.provider == 'demo':
             mode = 'Offline fixed fixture returned; no AI call.'
         else:

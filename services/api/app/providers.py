@@ -21,6 +21,23 @@ from app.config import Settings
 
 RETRYABLE_CODES = {'ThrottlingException', 'TooManyRequestsException', 'ServiceUnavailableException',
                    'InternalServerException', 'ModelNotReadyException'}
+MODEL_CATALOG = {
+    'nova-micro': {
+        'model_id': 'apac.amazon.nova-micro-v1:0',
+        'label': 'Nova Micro',
+        'description': 'Fastest · simple coding tasks',
+    },
+    'nova-lite': {
+        'model_id': 'apac.amazon.nova-lite-v1:0',
+        'label': 'Nova Lite',
+        'description': 'Balanced · everyday work',
+    },
+    'nova-pro': {
+        'model_id': 'apac.amazon.nova-pro-v1:0',
+        'label': 'Nova Pro',
+        'description': 'Advanced · complex reasoning',
+    },
+}
 
 
 class ProviderError(Exception):
@@ -106,12 +123,44 @@ class CodingProvider:
             )
         return self._client
 
-    def generate(self, message: str, *, max_tokens: int | None = None) -> Generation:
+    def model_options(self) -> list[dict[str, str]]:
+        if self.settings.nexus_provider != 'bedrock' or not self.settings.enabled_model_aliases:
+            return []
+        options = [{
+            'id': 'auto', 'label': 'Automatic',
+            'description': 'Chooses a verified model for each coding task',
+        }]
+        options.extend({'id': alias, 'label': MODEL_CATALOG[alias]['label'],
+                        'description': MODEL_CATALOG[alias]['description']}
+                       for alias in self.settings.enabled_model_aliases)
+        return options
+
+    def _model_id(self, message: str, choice: str) -> str:
+        enabled = self.settings.enabled_model_aliases
+        if choice != 'auto':
+            if choice not in enabled or choice not in MODEL_CATALOG:
+                raise ProviderError('That model is not enabled for this workspace.', 'model_not_enabled', 400)
+            return MODEL_CATALOG[choice]['model_id']
+        if not enabled:
+            return self.settings.bedrock_model_id.strip()
+        complexity = ('architecture', 'security', 'migration', 'refactor', 'optimize',
+                      'production', 'distributed', 'concurrency', 'performance')
+        lowered = message.lower()
+        if 'nova-pro' in enabled and (len(message) > 1500 or any(term in lowered for term in complexity)):
+            return MODEL_CATALOG['nova-pro']['model_id']
+        simple = ('function', 'snippet', 'syntax', 'regex', 'explain', 'fix')
+        if 'nova-micro' in enabled and len(message) <= 500 and any(term in lowered for term in simple):
+            return MODEL_CATALOG['nova-micro']['model_id']
+        if 'nova-lite' in enabled:
+            return MODEL_CATALOG['nova-lite']['model_id']
+        return MODEL_CATALOG[enabled[0]]['model_id']
+
+    def generate(self, message: str, *, max_tokens: int | None = None, model: str = 'auto') -> Generation:
         started = perf_counter()
         if self.settings.nexus_provider == 'demo':
             return Generation(DEMO_ANSWER, 'demo', 'fixture', None, None,
                               round((perf_counter() - started) * 1000), 'end_turn', False, 1)
-        model_id = self.settings.bedrock_model_id.strip()
+        model_id = self._model_id(message, model)
         if not model_id:
             raise ProviderError('Set BEDROCK_MODEL_ID to an accessible model or inference profile.',
                                 'model_not_configured', 503)

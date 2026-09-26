@@ -60,6 +60,10 @@ def test_unknown_agent_rejected(client):
     assert client.post('/api/chat', json={'message': 'hello', 'agent': 'admin'}).status_code == 422
 
 
+def test_unknown_model_rejected(client):
+    assert client.post('/api/chat', json={'message': 'Write code', 'model': 'arbitrary-model'}).status_code == 422
+
+
 def test_demo_access_token_required_when_configured():
     client = TestClient(create_app(Settings(_env_file=None, nexus_provider='demo', demo_access_token='test-secret')))
     assert client.get('/health').status_code == 200

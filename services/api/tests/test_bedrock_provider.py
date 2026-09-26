@@ -56,6 +56,55 @@ def test_generation_carries_usage_and_respects_token_cap(monkeypatch):
     assert 'text' not in generation.usage()
 
 
+@pytest.mark.parametrize(('choice', 'message', 'expected'), [
+    ('nova-micro', 'Write a small function.', 'apac.amazon.nova-micro-v1:0'),
+    ('nova-lite', 'Build an API endpoint.', 'apac.amazon.nova-lite-v1:0'),
+    ('nova-pro', 'Review this architecture.', 'apac.amazon.nova-pro-v1:0'),
+    ('auto', 'Explain this function.', 'apac.amazon.nova-micro-v1:0'),
+    ('auto', 'Plan a production security architecture.', 'apac.amazon.nova-pro-v1:0'),
+])
+def test_verified_model_catalog_routes_only_enabled_aliases(monkeypatch, choice, message, expected):
+    fake = FakeBedrock([converse_response()])
+    monkeypatch.setattr('app.providers.boto3.client', lambda *a, **kw: fake)
+    provider = CodingProvider(bedrock_settings(
+        bedrock_enabled_models='nova-micro,nova-lite,nova-pro',
+    ))
+    provider.generate(message, model=choice)
+    assert fake.calls[0]['modelId'] == expected
+
+
+def test_disabled_model_is_rejected_before_bedrock_call(monkeypatch):
+    monkeypatch.setattr('app.providers.boto3.client', lambda *a, **kw: pytest.fail('must not call AWS'))
+    provider = CodingProvider(bedrock_settings(bedrock_enabled_models='nova-lite'))
+    with pytest.raises(ProviderError) as info:
+        provider.generate('Complex task', model='nova-pro')
+    assert info.value.code == 'model_not_enabled'
+
+
+def test_health_exposes_public_model_metadata_without_aws_call(monkeypatch):
+    monkeypatch.setattr('app.providers.boto3.client', lambda *a, **kw: pytest.fail('health must not call AWS'))
+    client = TestClient(create_app(bedrock_settings(
+        bedrock_enabled_models='nova-micro,nova-lite,nova-pro',
+    )))
+    models = client.get('/health').json()['models']
+    assert [model['id'] for model in models] == ['auto', 'nova-micro', 'nova-lite', 'nova-pro']
+    assert all(set(model) == {'id', 'label', 'description'} for model in models)
+
+
+def test_api_passes_manual_model_choice_to_provider(monkeypatch):
+    fake = FakeBedrock([converse_response('pro answer')])
+    monkeypatch.setattr('app.providers.boto3.client', lambda *a, **kw: fake)
+    client = TestClient(create_app(bedrock_settings(
+        bedrock_enabled_models='nova-micro,nova-lite,nova-pro',
+    )))
+    response = client.post('/api/chat', json={
+        'message': 'Write a helper function.', 'agent': 'coding', 'model': 'nova-pro',
+    })
+    assert response.status_code == 200
+    assert fake.calls[0]['modelId'] == 'apac.amazon.nova-pro-v1:0'
+    assert response.json()['usage']['model'] == 'apac.amazon.nova-pro-v1:0'
+
+
 def test_client_is_reused_across_requests(monkeypatch):
     created = []
 
@@ -192,3 +241,8 @@ def test_production_bedrock_failure_returns_error_not_fixture(monkeypatch):
 def test_out_of_range_limits_are_rejected_at_startup(field, value):
     with pytest.raises(ConfigurationError):
         bedrock_settings(**{field: value}).validate_for_environment()
+
+
+def test_unknown_enabled_model_is_rejected_at_startup():
+    with pytest.raises(ConfigurationError, match='unsupported aliases'):
+        bedrock_settings(bedrock_enabled_models='nova-lite,untrusted-model').validate_for_environment()

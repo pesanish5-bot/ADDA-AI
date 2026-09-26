@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     aws_region: str = 'ap-south-1'
     # Converse model or inference profile id, e.g. global.anthropic.claude-haiku-4-5-20251001-v1:0
     bedrock_model_id: str = ''
+    # Public model aliases enabled for signed-in users. Empty preserves the single-model
+    # deployment behavior; aliases are resolved to server-owned IDs in providers.py.
+    bedrock_enabled_models: str = ''
     # Hard cap on generated tokens per request; callers may ask for less, never more.
     bedrock_max_tokens: int = 1500
     # Read timeout per attempt. Lambda has 28 s total; leave room for cold start and retry.
@@ -66,6 +69,12 @@ class Settings(BaseSettings):
         return bool(self.tavily_api_key.strip())
 
     @property
+    def enabled_model_aliases(self) -> list[str]:
+        return list(dict.fromkeys(
+            alias.strip().lower() for alias in self.bedrock_enabled_models.split(',') if alias.strip()
+        ))
+
+    @property
     def cognito_pool_region(self) -> str:
         return (self.cognito_region or self.aws_region or 'ap-south-1').strip()
 
@@ -102,6 +111,9 @@ class Settings(BaseSettings):
             )
         if self.nexus_provider == 'bedrock' and not self.bedrock_model_id.strip():
             problems.append('NEXUS_PROVIDER=bedrock requires BEDROCK_MODEL_ID.')
+        unsupported_models = set(self.enabled_model_aliases) - {'nova-micro', 'nova-lite', 'nova-pro'}
+        if unsupported_models:
+            problems.append(f'BEDROCK_ENABLED_MODELS contains unsupported aliases: {", ".join(sorted(unsupported_models))}.')
         if not 1 <= self.bedrock_max_tokens <= 8000:
             problems.append('BEDROCK_MAX_TOKENS must be between 1 and 8000.')
         if not 1 <= self.bedrock_timeout_seconds <= 25:

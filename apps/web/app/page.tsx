@@ -7,7 +7,7 @@ import WorkspaceOrb from "../components/ui/workspace-orb";
 import BrandMark from "../components/brand-mark";
 import AuthGate from "../components/AuthGate";
 import { useAuth } from "../components/AuthProvider";
-import { ApiError, archiveTask, deleteDocument, getHealth, listTasks, loadDemoDocument, removeTask, restoreTask, sendChat, uploadDocument, type Agent, type ChatResponse, type DocumentRef, type Health, type Provider, type TaskRecord } from "../lib/api";
+import { ApiError, archiveTask, deleteDocument, getHealth, listTasks, loadDemoDocument, removeTask, restoreTask, sendChat, uploadDocument, type Agent, type ChatResponse, type DocumentRef, type Health, type ModelChoice, type Provider, type TaskRecord } from "../lib/api";
 
 const specialists = [
   { id: "coding", mark: "</>", name: "Coding", description: "Build, explain & debug" },
@@ -32,6 +32,7 @@ function pendingSteps(agent: Agent): string[] {
 }
 type Task = TaskRecord;
 const HISTORY_KEY = "adda.session.history";
+const MODEL_KEY = "adda.model.preference";
 const HISTORY_LIMIT = 100;
 function loadHistory(): Task[] {
   if (typeof window === "undefined") return [];
@@ -51,7 +52,13 @@ function loadHistory(): Task[] {
   } catch { return []; }
 }
 function saveHistory(items: Task[]) {
-  try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 20))); } catch { /* private mode / quota */ }
+  try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, HISTORY_LIMIT))); } catch { /* private mode / quota */ }
+}
+function modelChoiceFromId(model?: string): ModelChoice {
+  if (model?.includes("nova-micro")) return "nova-micro";
+  if (model?.includes("nova-pro")) return "nova-pro";
+  if (model?.includes("nova-lite")) return "nova-lite";
+  return "auto";
 }
 function safeUrl(url?: string) { return url && /^https?:\/\/./i.test(url) ? url : undefined; }
 function hostOf(url?: string) {
@@ -107,6 +114,7 @@ function Workspace() {
   const [connection, setConnection] = useState("Connecting");
   const [message, setMessage] = useState("");
   const [agent, setAgent] = useState<Agent>("auto");
+  const [model, setModel] = useState<ModelChoice>("auto");
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -138,6 +146,8 @@ function Workspace() {
     window.location.replace("/login/");
   }
   useEffect(() => {
+    const savedModel = localStorage.getItem(MODEL_KEY) as ModelChoice | null;
+    if (["auto", "nova-micro", "nova-lite", "nova-pro"].includes(savedModel || "")) setModel(savedModel!);
     const restored = loadHistory();
     if (restored.length) setHistory(restored);
     historyReady.current = true;
@@ -170,10 +180,9 @@ function Workspace() {
     setBusy(false);
     setError("Task stopped. Your previous results are still available in Recent work.");
   }
-  function goHome() {
-    if (locked) return;
-    newTask();
-    if (typeof window !== "undefined" && window.location.pathname !== "/") window.location.assign("/");
+  function chooseModel(choice: ModelChoice) {
+    setModel(choice);
+    try { localStorage.setItem(MODEL_KEY, choice); } catch { /* private mode / quota */ }
   }
   function applyTry(item: (typeof tryPrompts)[number]) {
     if (locked) return;
@@ -194,6 +203,7 @@ function Workspace() {
   function openTask(task: Task) {
     setSelected(task); setError(""); setSubmitted(task.prompt); setMessage(task.prompt);
     setAgent(specialists.some((item) => item.id === task.response.agent) ? task.response.agent as Agent : "auto");
+    chooseModel(modelChoiceFromId(task.response.usage?.model));
     setMenuOpen(false);
   }
   async function changeArchive(task: Task, archive: boolean) {
@@ -278,7 +288,7 @@ function Workspace() {
     runAbort.current = controller;
     setBusy(true); setError(""); setSelected(null); setSubmitted(message.trim()); setMenuOpen(false);
     try {
-      const response = await sendChat(message.trim(), agent, document, controller.signal);
+      const response = await sendChat(message.trim(), agent, model, document, controller.signal);
       if (controller.signal.aborted) return;
       const now = new Date().toISOString();
       const task: Task = { id: response.request_id, prompt: message.trim(), response, created_at: now, updated_at: now, archived: false };
@@ -306,11 +316,12 @@ function Workspace() {
   const providerTitle = result ? labels[result.provider] || result.provider : health?.provider === "demo" ? "Coding uses an offline sample. Documents use real retrieval." : health?.provider === "bedrock" ? "Bedrock configured · model access verified by each response" : "Your task. The right capability. A visible trail of evidence.";
   const routeHint = agent === "auto" ? "Auto-route" : agentLabels[agent] || agent;
   const visibleHistory = historyView === "archive" ? archivedHistory : history;
+  const modelOptions = health?.models?.length ? health.models : [{ id: "auto" as const, label: "Automatic", description: "Uses the configured model" }];
   return <div className={`workspace${menuOpen ? " nav-open" : ""}`} aria-busy={locked}>
     <div className="nav-scrim" onClick={() => setMenuOpen(false)} hidden={!menuOpen} />
     <aside className="sidebar">
       <div className="sidebar-top">
-        <button type="button" className="brand" onClick={goHome} aria-label="ADDA AI home" disabled={locked}><BrandMark />ADDA<span>AI</span></button>
+        <button type="button" className="brand" onClick={() => window.location.reload()} aria-label="Refresh ADDA AI" title="Refresh ADDA AI"><BrandMark />ADDA<span>AI</span></button>
         <button className="menu-button" type="button" aria-expanded={menuOpen} aria-controls="workspace-nav" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? "Close" : "Menu"}</button>
       </div>
       <button className="new-task" onClick={newTask} disabled={locked}><span>＋</span> New task</button>
@@ -380,6 +391,7 @@ function Workspace() {
               <div className="composer-bottom">
                 <div className="composer-tools">
                   <label className="agent-select"><select aria-label="Agent routing" value={agent} onChange={(event) => setAgent(event.target.value as Agent)} disabled={locked}><option value="auto">Auto-route</option>{specialists.map((item) => <option key={item.id} value={item.id} disabled={!ready(item.id)}>{item.name}</option>)}</select></label>
+                  <label className="agent-select model-select" title="Used when the task routes to Coding"><span>Model</span><select aria-label="AI model" value={model} onChange={(event) => chooseModel(event.target.value as ModelChoice)} disabled={locked || !health?.models?.length}>{modelOptions.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.description}</option>)}</select></label>
                   <button className="upload-button" type="button" disabled={locked || !ready("document")} onClick={() => fileInput.current?.click()} title="Upload PDF or TXT">{uploading ? "Uploading…" : "＋ Attach"}</button>
                 </div>
                 <button className="run-button" disabled={locked || !message.trim()} type="submit">{busy ? "Working…" : "Run task"}<span>↗</span></button>

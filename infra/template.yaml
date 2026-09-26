@@ -29,6 +29,11 @@ Parameters:
     Type: String
     Default: ''
     Description: Account-accessible Converse model or inference profile ID.
+  BedrockEnabledModels:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^nova-(micro|lite|pro)(,nova-(micro|lite|pro))*$'
+    Description: Comma-separated public model aliases. Empty keeps the single-model behavior.
   BedrockMaxTokens:
     Type: Number
     Default: 1500
@@ -172,6 +177,7 @@ Resources:
           ALLOW_DEMO_FIXTURE: !Ref AllowDemoFixture
           NEXUS_PROVIDER: !Ref Provider
           BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_ENABLED_MODELS: !Ref BedrockEnabledModels
           BEDROCK_MAX_TOKENS: !Ref BedrockMaxTokens
           BEDROCK_TIMEOUT_SECONDS: '20'
           BEDROCK_MAX_ATTEMPTS: '2'

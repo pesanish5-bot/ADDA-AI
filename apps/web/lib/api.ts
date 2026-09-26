@@ -2,12 +2,15 @@ import { getIdToken } from "./cognito";
 
 export type Provider = "demo" | "bedrock" | "extractive" | "tavily" | "local";
 export type Agent = "auto" | "coding" | "document" | "search" | "research";
+export type ModelChoice = "auto" | "nova-micro" | "nova-lite" | "nova-pro";
+export type ModelOption = { id: ModelChoice; label: string; description: string };
 export type Health = {
   status: "ok";
   provider: Provider;
   capabilities: Record<Exclude<Agent, "auto">, boolean>;
   limits?: Record<string, number>;
   auth?: { configured: boolean; provider: string; required: boolean };
+  models?: ModelOption[];
 };
 export type DocumentRef = { document_id: string; document_token: string; filename: string; pages: number; chunks: number };
 export type ChatResponse = {
@@ -65,9 +68,9 @@ export const syncAuthProfile = (
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ event, display_name: displayName }),
 });
-export const sendChat = (message: string, agent: Agent, document?: DocumentRef | null, signal?: AbortSignal) => request<ChatResponse>("/api/chat", 65_000, {
+export const sendChat = (message: string, agent: Agent, model: ModelChoice, document?: DocumentRef | null, signal?: AbortSignal) => request<ChatResponse>("/api/chat", 65_000, {
   method: "POST", headers: { "Content-Type": "application/json", ...(document ? { "X-Document-Token": document.document_token } : {}) },
-  body: JSON.stringify({ message, agent, ...(document ? { document_id: document.document_id } : {}) }),
+  body: JSON.stringify({ message, agent, model, ...(document ? { document_id: document.document_id } : {}) }),
 }, signal);
 export const listTasks = (archived = false) => request<TaskRecord[]>(`/api/tasks?archived=${archived}`, 10_000);
 export const archiveTask = (taskId: string) => request<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}/archive`, 10_000, { method: "POST" });

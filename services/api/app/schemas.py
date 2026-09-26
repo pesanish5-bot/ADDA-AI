@@ -3,12 +3,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Agent = Literal['auto', 'coding', 'document', 'search', 'research']
+ModelChoice = Literal['auto', 'nova-micro', 'nova-lite', 'nova-pro']
 
 
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     message: str = Field(min_length=1, max_length=12000)
     agent: Agent = 'auto'
+    model: ModelChoice = 'auto'
     document_id: str | None = Field(default=None, max_length=100)
 
     @field_validator('message')
