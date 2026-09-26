@@ -1,5 +1,9 @@
 :root { --auth-story: #172a35; --auth-story-ink: #f4f9f8; --auth-story-accent: #91dbc0; }
-html[data-theme="dark"] { --auth-story: #0c2423; --auth-story-accent: #83d6b5; }
+html[data-theme="dark"] { --auth-story: #10182d; --auth-story-accent: #91adff; }
+html[data-accent="forest"] { --auth-story: #102b23; --auth-story-accent: #91dfbd; }
+html[data-accent="violet"] { --auth-story: #211936; --auth-story-accent: #c3aff5; }
+html[data-accent="amber"] { --auth-story: #302311; --auth-story-accent: #f1c575; }
+html[data-accent="graphite"] { --auth-story: #20262f; --auth-story-accent: #cad1dc; }
 
 
 .auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(390px, .98fr) minmax(480px, 1.02fr); background: var(--bg); }
