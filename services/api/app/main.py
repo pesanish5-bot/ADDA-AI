@@ -20,7 +20,8 @@ from app.graph import build_graph
 from app.observability import RequestContext, annotate, configure_logging, current_request_id, log_event
 from app.providers import CodingProvider, ProviderError
 from app.ratelimit import RateLimit, RateLimiter
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas import ChatRequest, ChatResponse, TaskRecord
+from app.task_store import DynamoTaskStore, MemoryTaskStore, TaskStore
 
 
 def _request_id(request: Request) -> str:
@@ -37,6 +38,7 @@ def create_app(
     settings: Settings | None = None,
     provider: CodingProvider | None = None,
     auth_service: AuthService | None = None,
+    task_store: TaskStore | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
@@ -46,6 +48,10 @@ def create_app(
     documents = S3DocumentStore(settings.document_bucket) if settings.document_bucket else DocumentStore()
     graph = build_graph(provider or CodingProvider(settings), documents)
     auth = auth_service or AuthService(settings)
+    tasks = task_store or (
+        DynamoTaskStore(settings.auth_profiles_table, settings.cognito_pool_region)
+        if settings.auth_profiles_table.strip() else MemoryTaskStore()
+    )
     app = FastAPI(title='ADDA AI API', version=settings.app_version,
                   docs_url=None if settings.is_production else '/docs',
                   redoc_url=None, openapi_url=None if settings.is_production else '/openapi.json')
@@ -200,6 +206,35 @@ def create_app(
         annotate(route='document_delete')
         return {'deleted': True}
 
+    def task_owner(claims: dict) -> str:
+        user_id = str(claims.get('sub') or '')
+        if not user_id:
+            raise HTTPException(401, detail={'code': 'unauthorized', 'message': 'Sign in required.'})
+        return user_id
+
+    @app.get('/api/tasks', response_model=list[TaskRecord])
+    def list_tasks(archived: bool = False, claims: dict = Depends(authorize)):
+        return tasks.list_tasks(task_owner(claims), archived=archived)
+
+    @app.post('/api/tasks/{task_id}/archive', response_model=TaskRecord)
+    def archive_task(task_id: str, claims: dict = Depends(authorize)):
+        task = tasks.set_archived(task_owner(claims), task_id, archived=True)
+        if not task:
+            raise HTTPException(404, detail={'code': 'task_not_found', 'message': 'That task was not found.'})
+        return task
+
+    @app.post('/api/tasks/{task_id}/restore', response_model=TaskRecord)
+    def restore_task(task_id: str, claims: dict = Depends(authorize)):
+        task = tasks.set_archived(task_owner(claims), task_id, archived=False)
+        if not task:
+            raise HTTPException(404, detail={'code': 'task_not_found', 'message': 'That task was not found.'})
+        return task
+
+    @app.delete('/api/tasks/{task_id}')
+    def delete_task(task_id: str, claims: dict = Depends(authorize)):
+        tasks.delete_task(task_owner(claims), task_id)
+        return {'deleted': True}
+
     @app.post('/api/chat', response_model=ChatResponse)
     def chat(
         body: ChatRequest,
@@ -221,9 +256,17 @@ def create_app(
             annotate(model=usage.get('model'), input_tokens=usage.get('input_tokens'),
                      output_tokens=usage.get('output_tokens'), provider_latency_ms=usage.get('latency_ms'),
                      stop_reason=usage.get('stop_reason'), attempts=usage.get('attempts'))
-        return ChatResponse(request_id=request_id, agent=state['agent'], answer=state['answer'],
-                            provider=state['provider'], activity=state['activity'],
-                            citations=state.get('citations') or [], usage=usage)
+        response = ChatResponse(request_id=request_id, agent=state['agent'], answer=state['answer'],
+                                provider=state['provider'], activity=state['activity'],
+                                citations=state.get('citations') or [], usage=usage)
+        user_id = str(claims.get('sub') or '')
+        if user_id:
+            try:
+                tasks.save_task(user_id, body.message, response.model_dump(mode='json'))
+            except Exception as exc:
+                log_event('task history persistence failed', logging.ERROR,
+                          exception=type(exc).__name__, user_id=user_id)
+        return response
 
     return app
 

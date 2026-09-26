@@ -16,6 +16,14 @@ export type ChatResponse = {
   citations: { id?: string; title?: string; url?: string; page?: number; excerpt?: string }[];
   usage?: { provider: string; model: string; input_tokens?: number | null; output_tokens?: number | null; latency_ms: number; stop_reason?: string | null; truncated?: boolean; attempts?: number } | null;
 };
+export type TaskRecord = {
+  id: string;
+  prompt: string;
+  response: ChatResponse;
+  created_at: string;
+  updated_at: string;
+  archived: boolean;
+};
 const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 export class ApiError extends Error { constructor(message: string, public status: number) { super(message); this.name = "ApiError"; } }
 function requestSignal(timeoutMs: number, extra?: AbortSignal) {
@@ -61,6 +69,10 @@ export const sendChat = (message: string, agent: Agent, document?: DocumentRef |
   method: "POST", headers: { "Content-Type": "application/json", ...(document ? { "X-Document-Token": document.document_token } : {}) },
   body: JSON.stringify({ message, agent, ...(document ? { document_id: document.document_id } : {}) }),
 }, signal);
+export const listTasks = (archived = false) => request<TaskRecord[]>(`/api/tasks?archived=${archived}`, 10_000);
+export const archiveTask = (taskId: string) => request<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}/archive`, 10_000, { method: "POST" });
+export const restoreTask = (taskId: string) => request<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}/restore`, 10_000, { method: "POST" });
+export const removeTask = (taskId: string) => request<{ deleted: boolean }>(`/api/tasks/${encodeURIComponent(taskId)}`, 10_000, { method: "DELETE" });
 export const uploadDocument = (file: File) => {
   const body = new FormData(); body.append("file", file);
   return request<DocumentRef>("/api/documents", 30_000, { method: "POST", body });

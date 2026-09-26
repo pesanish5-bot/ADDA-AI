@@ -55,3 +55,12 @@ class ChatResponse(BaseModel):
     activity: list[Activity]
     citations: list[Citation] = Field(default_factory=list)
     usage: Usage | None = None
+
+
+class TaskRecord(BaseModel):
+    id: str
+    prompt: str
+    response: ChatResponse
+    created_at: str
+    updated_at: str
+    archived: bool = False

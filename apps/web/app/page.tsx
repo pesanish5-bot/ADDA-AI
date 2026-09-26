@@ -7,7 +7,7 @@ import WorkspaceOrb from "../components/ui/workspace-orb";
 import BrandMark from "../components/brand-mark";
 import AuthGate from "../components/AuthGate";
 import { useAuth } from "../components/AuthProvider";
-import { ApiError, getHealth, sendChat, uploadDocument, loadDemoDocument, deleteDocument, type Agent, type ChatResponse, type Health, type DocumentRef, type Provider } from "../lib/api";
+import { ApiError, archiveTask, deleteDocument, getHealth, listTasks, loadDemoDocument, removeTask, restoreTask, sendChat, uploadDocument, type Agent, type ChatResponse, type DocumentRef, type Health, type Provider, type TaskRecord } from "../lib/api";
 
 const specialists = [
   { id: "coding", mark: "</>", name: "Coding", description: "Build, explain & debug" },
@@ -30,15 +30,24 @@ function pendingSteps(agent: Agent): string[] {
   if (agent === "coding") return ["Route request", "Generate coding answer"];
   return ["Choose specialist", "Run agent", "Return evidence"];
 }
-type Task = { prompt: string; response: ChatResponse };
+type Task = TaskRecord;
 const HISTORY_KEY = "adda.session.history";
+const HISTORY_LIMIT = 100;
 function loadHistory(): Task[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = sessionStorage.getItem(HISTORY_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as Task[];
-    return Array.isArray(parsed) ? parsed.filter((item) => item?.prompt && item?.response?.request_id).slice(0, 20) : [];
+    const parsed = JSON.parse(raw) as Partial<Task>[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item) => item?.prompt && item?.response?.request_id).map((item) => ({
+      id: item.id || item.response!.request_id,
+      prompt: item.prompt!,
+      response: item.response!,
+      created_at: item.created_at || new Date().toISOString(),
+      updated_at: item.updated_at || item.created_at || new Date().toISOString(),
+      archived: false,
+    })).slice(0, HISTORY_LIMIT);
   } catch { return []; }
 }
 function saveHistory(items: Task[]) {
@@ -104,6 +113,10 @@ function Workspace() {
   const [uploadError, setUploadError] = useState("");
   const [document, setDocument] = useState<DocumentRef | null>(null);
   const [history, setHistory] = useState<Task[]>([]);
+  const [archivedHistory, setArchivedHistory] = useState<Task[]>([]);
+  const [historyView, setHistoryView] = useState<"recent" | "archive">("recent");
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Task | null>(null);
   const [submitted, setSubmitted] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -129,19 +142,33 @@ function Workspace() {
     if (restored.length) setHistory(restored);
     historyReady.current = true;
     void checkConnection();
+    void Promise.all([listTasks(false), listTasks(true)])
+      .then(([recent, archived]) => {
+        setHistory((current) => {
+          const remoteIds = new Set(recent.map((task) => task.id));
+          const merged = [...recent, ...current.filter((task) => !remoteIds.has(task.id))]
+            .sort((left, right) => right.created_at.localeCompare(left.created_at))
+            .slice(0, HISTORY_LIMIT);
+          saveHistory(merged);
+          return merged;
+        });
+        setArchivedHistory(archived);
+      })
+      .catch(() => { /* Keep the browser fallback when history sync is temporarily unavailable. */ })
+      .finally(() => setHistoryLoading(false));
     return () => { runAbort.current?.abort(); };
   }, []);
   useEffect(() => {
     if (!historyReady.current) return;
     saveHistory(history);
   }, [history]);
-  function newTask() { setMessage(""); setAgent("auto"); setSelected(null); setError(""); setSubmitted(""); setMenuOpen(false); }
+  function newTask() { setMessage(""); setAgent("auto"); setSelected(null); setError(""); setSubmitted(""); setHistoryView("recent"); setMenuOpen(false); }
   function stopTask() {
     if (!busy) return;
     runAbort.current?.abort();
     runAbort.current = null;
     setBusy(false);
-    setError("Task stopped. Your previous results are still in This Session.");
+    setError("Task stopped. Your previous results are still available in Recent work.");
   }
   function goHome() {
     if (locked) return;
@@ -164,11 +191,43 @@ function Workspace() {
     setError("");
     setMenuOpen(false);
   }
-  function clearHistory() {
-    if (locked || !history.length) return;
-    setHistory([]);
-    setSelected(null);
-    saveHistory([]);
+  function openTask(task: Task) {
+    setSelected(task); setError(""); setSubmitted(task.prompt); setMessage(task.prompt);
+    setAgent(specialists.some((item) => item.id === task.response.agent) ? task.response.agent as Agent : "auto");
+    setMenuOpen(false);
+  }
+  async function changeArchive(task: Task, archive: boolean) {
+    if (locked) return;
+    try {
+      const updated = archive ? await archiveTask(task.id) : await restoreTask(task.id);
+      if (archive) {
+        setHistory((items) => items.filter((item) => item.id !== task.id));
+        setArchivedHistory((items) => [updated, ...items.filter((item) => item.id !== task.id)]);
+      } else {
+        setArchivedHistory((items) => items.filter((item) => item.id !== task.id));
+        setHistory((items) => [updated, ...items.filter((item) => item.id !== task.id)]);
+      }
+      if (selected?.id === task.id) setSelected(null);
+    } catch (failure) {
+      if (failure instanceof ApiError && failure.status === 401) window.location.replace("/login/");
+      else setError(failure instanceof Error ? failure.message : "History could not be updated.");
+    }
+  }
+  async function deleteArchivedTask(task: Task) {
+    if (locked) return;
+    if (deleteConfirmId !== task.id) {
+      setDeleteConfirmId(task.id);
+      return;
+    }
+    try {
+      await removeTask(task.id);
+      setArchivedHistory((items) => items.filter((item) => item.id !== task.id));
+      setDeleteConfirmId(null);
+      if (selected?.id === task.id) setSelected(null);
+    } catch (failure) {
+      if (failure instanceof ApiError && failure.status === 401) window.location.replace("/login/");
+      else setError(failure instanceof Error ? failure.message : "The archived task could not be deleted.");
+    }
   }
   async function removeDocument() {
     if (locked || !document) return;
@@ -221,9 +280,10 @@ function Workspace() {
     try {
       const response = await sendChat(message.trim(), agent, document, controller.signal);
       if (controller.signal.aborted) return;
-      const task = { prompt: message.trim(), response };
+      const now = new Date().toISOString();
+      const task: Task = { id: response.request_id, prompt: message.trim(), response, created_at: now, updated_at: now, archived: false };
       setSelected(task);
-      setHistory((items) => [task, ...items].slice(0, 20));
+      setHistory((items) => [task, ...items].slice(0, HISTORY_LIMIT));
     } catch (failure) {
       if (controller.signal.aborted) return;
       if (failure instanceof ApiError && failure.status === 401) {
@@ -245,6 +305,7 @@ function Workspace() {
   }
   const providerTitle = result ? labels[result.provider] || result.provider : health?.provider === "demo" ? "Coding uses an offline sample. Documents use real retrieval." : health?.provider === "bedrock" ? "Bedrock configured · model access verified by each response" : "Your task. The right capability. A visible trail of evidence.";
   const routeHint = agent === "auto" ? "Auto-route" : agentLabels[agent] || agent;
+  const visibleHistory = historyView === "archive" ? archivedHistory : history;
   return <div className={`workspace${menuOpen ? " nav-open" : ""}`} aria-busy={locked}>
     <div className="nav-scrim" onClick={() => setMenuOpen(false)} hidden={!menuOpen} />
     <aside className="sidebar">
@@ -254,24 +315,31 @@ function Workspace() {
       </div>
       <button className="new-task" onClick={newTask} disabled={locked}><span>＋</span> New task</button>
       <div className="workspace-label">Workspace</div>
-      <button className={`nav-item ${agent === "auto" ? "selected" : ""}`} onClick={() => { setAgent("auto"); setMenuOpen(false); }} disabled={locked}><span>↗</span> Automatic routing</button>
+      <button className={`nav-item ${agent === "auto" && historyView === "recent" ? "selected" : ""}`} onClick={() => { setAgent("auto"); setHistoryView("recent"); setMenuOpen(false); }} disabled={locked}><span>↗</span> Automatic routing</button>
+      <button className={`nav-item ${historyView === "archive" ? "selected" : ""}`} onClick={() => { setHistoryView("archive"); setSelected(null); setDeleteConfirmId(null); setMenuOpen(false); }} disabled={locked}><span>▱</span> Archive <small>{archivedHistory.length || ""}</small></button>
       <div id="workspace-nav" className="sidebar-nav">
         <p className="sidebar-heading">SPECIALISTS</p>
         <nav aria-label="Specialist agents">{specialists.map((item) => {
           const available = ready(item.id);
           const status = specialistStatus(item.id, available, health);
-          return <button key={item.id} className={`specialist agent-${item.id} ${agent === item.id ? "active" : ""}`} disabled={locked || !available} onClick={() => { setAgent(item.id); setMenuOpen(false); }}>
+          return <button key={item.id} className={`specialist agent-${item.id} ${agent === item.id && historyView === "recent" ? "active" : ""}`} disabled={locked || !available} onClick={() => { setAgent(item.id); setHistoryView("recent"); setMenuOpen(false); }}>
             <span className="agent-mark">{item.mark}</span>
             <span className="specialist-text"><strong>{item.name}</strong><small>{item.description}</small></span>
             <span className={`status-chip ${statusClass(status)}`}>{status}</span>
           </button>;
         })}</nav>
         <section className="task-history">
-          <p className="sidebar-heading">THIS SESSION <span>{history.length}</span>{history.length > 0 && <button type="button" className="history-clear" disabled={locked} onClick={clearHistory}>Clear</button>}</p>
-          {history.length ? history.map((task) => <button className={selected === task ? "history-item active" : "history-item"} key={task.response.request_id} disabled={locked} onClick={() => { setSelected(task); setError(""); setSubmitted(task.prompt); setMessage(task.prompt); setAgent(specialists.some((item) => item.id === task.response.agent) ? task.response.agent as Agent : "auto"); setMenuOpen(false); }}>
-            <span>{task.prompt}</span>
-            <small>{agentLabels[task.response.agent] || task.response.agent} · completed</small>
-          </button>) : <p className="history-empty">Completed tasks stay in this browser tab.</p>}
+          <p className="sidebar-heading">{historyView === "archive" ? "ARCHIVED" : "RECENT WORK"} <span>{visibleHistory.length}</span></p>
+          {historyLoading && !visibleHistory.length ? <p className="history-empty">Syncing your work…</p> : visibleHistory.length ? visibleHistory.map((task) => <div className={`history-row ${selected?.id === task.id ? "active" : ""}`} key={task.id}>
+            <button className="history-item" type="button" disabled={locked} onClick={() => openTask(task)}>
+              <span>{task.prompt}</span>
+              <small>{agentLabels[task.response.agent] || task.response.agent} · {historyView === "archive" ? "archived" : "completed"}</small>
+            </button>
+            <div className="history-actions">
+              <button type="button" disabled={locked} title={historyView === "archive" ? "Restore task" : "Archive task"} aria-label={historyView === "archive" ? `Restore ${task.prompt}` : `Archive ${task.prompt}`} onClick={() => void changeArchive(task, historyView !== "archive")}>{historyView === "archive" ? "↥" : "▱"}</button>
+              {historyView === "archive" && <button type="button" className={`history-delete ${deleteConfirmId === task.id ? "confirm" : ""}`} disabled={locked} title={deleteConfirmId === task.id ? "Click again to delete permanently" : "Delete permanently"} aria-label={deleteConfirmId === task.id ? `Confirm permanent deletion of ${task.prompt}` : `Delete ${task.prompt} permanently`} onClick={() => void deleteArchivedTask(task)}>{deleteConfirmId === task.id ? "Confirm" : "Delete"}</button>}
+            </div>
+          </div>) : <p className="history-empty">{historyView === "archive" ? "Archived tasks will appear here." : "Completed tasks sync securely to your account."}</p>}
         </section>
       </div>
       <div className="sidebar-bottom account-panel">
@@ -351,10 +419,11 @@ function Workspace() {
             <div className="activity-title"><h2 id="activity-heading">Agent activity</h2><span className="activity-count">{result?.activity.length || (busy ? "…" : "—")}</span></div>
             <p className="activity-subtitle">{busy ? "Expected path while the specialist works." : "Completed steps for this task"}</p>
             {result ? <ol className="trace">{result.activity.map((item, index) => <li key={`${item.step}-${index}`}><span className="trace-check">✓</span><div><strong>{item.step.replaceAll("_", " ")}</strong><p>{item.detail}</p><small>{item.duration_ms} ms · completed</small></div></li>)}</ol> : <ol className="trace pending-trace" aria-live="polite">{pendingSteps(agent).map((step, index) => <li key={step} className={index === 0 ? "active-step" : ""}><span className="trace-check">{index === 0 ? "…" : index + 1}</span><div><strong>{step}</strong><p>{index === 0 ? "In progress" : "Waiting"}</p></div></li>)}</ol>}
+            {result?.usage && <dl className="usage-grid" aria-label="Model usage"><div><dt>Model</dt><dd>{result.usage.model.replace(/^apac\./, "").replace(/-v\d+:\d+$/, "")}</dd></div><div><dt>Tokens</dt><dd>{(result.usage.input_tokens || 0) + (result.usage.output_tokens || 0)}</dd></div><div><dt>Model time</dt><dd>{result.usage.latency_ms} ms</dd></div><div><dt>Attempts</dt><dd>{result.usage.attempts || 1}</dd></div></dl>}
             <div className="trace-note">{result ? labels[result.provider] : busy ? <button type="button" className="stop-button" onClick={stopTask}>Stop task</button> : "Waiting for the response"}</div>
           </aside>}
         </div>
-        <footer className="page-footer"><span>Each task is independent. History stays in this tab.</span><button type="button" className="footer-auth" onClick={() => void handleSignOut()}>Sign out</button></footer>
+        <footer className="page-footer"><span>Tasks are private to your account and remain independent.</span><span><a href="https://rareui.com" target="_blank" rel="noopener noreferrer">Rare UI credit</a><button type="button" className="footer-auth" onClick={() => void handleSignOut()}>Sign out</button></span></footer>
       </div>
     </main>
   </div>;

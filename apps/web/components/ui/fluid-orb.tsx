@@ -107,7 +107,10 @@ function compile(gl: WebGLRenderingContext, type: number, src: string) {
   return shader;
 }
 
-/** Rare UI Fluid Orb — adapted for ADDA without a Tailwind dependency. */
+/**
+ * Rare UI Fluid Orb — adapted for ADDA without a Tailwind dependency.
+ * Copyright (c) 2026 Swami Malode. Source and license: https://rareui.com
+ */
 const FluidOrb = ({
   size = 240,
   color = "#3658bd",
