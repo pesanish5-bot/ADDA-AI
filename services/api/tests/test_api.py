@@ -30,9 +30,12 @@ def test_rejects_invalid_messages(client, message):
 
 
 def test_document_requires_upload(client):
-    result = client.post('/api/chat', json={'message': 'Summarize this PDF'})
-    assert result.status_code == 422
-    assert result.json()['detail']['code'] == 'document_required'
+    result = client.post('/api/chat', json={'message': 'Summarize this PDF', 'agent': 'document'})
+    assert result.status_code == 200
+    body = result.json()
+    assert body['agent'] == 'document'
+    assert 'Attach a PDF' in body['answer']
+    assert body['citations'] == []
 
 
 def test_web_research_requires_search_access(client):
@@ -82,7 +85,7 @@ def test_bedrock_payload_and_answer(monkeypatch):
         def converse(self, **kwargs):
             assert kwargs['modelId'] == 'test-model'
             assert kwargs['messages'][0]['content'][0]['text'] == 'Write code'
-            assert kwargs['inferenceConfig']['maxTokens'] == 1200
+            assert kwargs['inferenceConfig']['maxTokens'] == 1500  # Settings.bedrock_max_tokens default
             return {'output': {'message': {'content': [{'text': 'Generated answer'}]}}}
 
     monkeypatch.setattr('app.providers.boto3.client', lambda *a, **kw: FakeBedrock())
@@ -128,7 +131,8 @@ def test_health_does_not_invoke_model(monkeypatch):
         raise AssertionError('Health must not call AWS')
 
     monkeypatch.setattr('app.providers.boto3.client', forbidden)
-    client = TestClient(create_app(Settings(_env_file=None, nexus_provider='bedrock')))
+    client = TestClient(create_app(Settings(_env_file=None, nexus_provider='bedrock',
+                                            bedrock_model_id='anthropic.test-model')))
     result = client.get('/health')
     assert result.status_code == 200
     assert result.json()['provider'] == 'bedrock'

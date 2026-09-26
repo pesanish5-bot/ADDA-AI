@@ -4,9 +4,9 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app.agents.search import MAX_RESULTS, SearchProvider
 from app.agents.document import DocumentStore
-from app.agents.research import plan_research, collect_research, render_research
+from app.agents.research import collect_research, plan_research, render_research
+from app.agents.search import MAX_RESULTS, SearchProvider
 from app.providers import CodingProvider, ProviderError
 
 
@@ -22,28 +22,44 @@ class AgentState(TypedDict):
     provider: str
     plan: list[str]
     collection: dict
+    usage: dict | None
+    user_id: str
 
 
 def select_agent(message: str, requested_agent: str, document_id: str | None = None) -> tuple[str, str]:
     if requested_agent != 'auto':
         return requested_agent, 'Selected explicitly in the request.'
+    text = ' '.join(message.split())
     # Intent rules are visible, deterministic and testable; no claim of model classification.
-    if re.search(r'\b(write|implement|debug|fix|explain|refactor|generate|build|review|optimize|compare)\b', message, re.I) and re.search(r'\b(code|coding|function|python|javascript|typescript|react|sql|component|bug)\b', message, re.I):
+    coding_action = re.search(
+        r'\b(write|implement|debug|fix|explain|refactor|generate|build|review|optimize|compare)\b',
+        text, re.I,
+    )
+    coding_context = re.search(
+        r'\b(code|coding|function|python|javascript|typescript|react|sql|component|bug)\b',
+        text, re.I,
+    )
+    if coding_action and coding_context:
         return 'coding', 'Programming action and code context detected.'
-    if re.search(r'\b(research|investigate|compare)\b', message, re.I):
+    if re.search(r'\b(research|investigate)\b', text, re.I):
         return 'research', 'Evidence brief requested; plan, retrieve, and assemble sources.'
-    if document_id and not re.search(r'\b(search|latest|news|web)\b', message, re.I):
+    web_intent = re.search(
+        r'\b(search|latest|news|today|web|current|recent|developments?|trends?|happening|online)\b',
+        text, re.I,
+    )
+    if document_id and not web_intent:
         return 'document', 'Using the attached document as the evidence source.'
-    routes = [
-        ('document', r'\b(pdf|document|uploaded|attachment)\b'),
-        ('research', r'\b(research|compare|investigate)\b'),
-        ('search', r'\b(search|latest|news|today|web|current|recent)\b'),
-        ('coding', r'\b(code|coding|python|javascript|typescript|react|function|debug|bug|sql)\b'),
-    ]
-    for agent, pattern in routes:
-        if re.search(pattern, message, re.IGNORECASE):
-            return agent, f'Keyword router matched {agent} intent.'
-    return 'coding', 'First milestone fallback to Coding; ask a programming question.'
+    if web_intent:
+        return 'search', 'Keyword router matched search intent.'
+    if re.search(r'\b(what|who|when|where|why|how|find|tell me)\b', text, re.I) or text.endswith('?'):
+        return 'search', 'Open question; routing to Search for web sources.'
+    if re.search(r'\b(code|coding|python|javascript|typescript|react|function|debug|bug|sql)\b', text, re.I):
+        return 'coding', 'Keyword router matched coding intent.'
+    if re.search(r'\b(pdf|document|uploaded|attachment|summarize|summary|cite|budget|pages?)\b', text, re.I):
+        if document_id:
+            return 'document', 'Document question with an attached file.'
+        return 'document', 'Document referenced without an attached file.'
+    return 'coding', 'No specialist keywords matched; defaulting to the Coding demo path.'
 
 
 def _next_node(state: AgentState) -> str:
@@ -72,12 +88,21 @@ def build_graph(provider: CodingProvider, documents: DocumentStore | None = None
 
     def coding(state: AgentState):
         started = perf_counter()
-        answer = provider.generate(state['message'])
-        mode = 'Offline fixed fixture returned; no AI call.' if provider.settings.nexus_provider == 'demo' else 'Bedrock Converse returned an answer; code was not executed.'
-        return {'answer': answer, 'provider': provider.settings.nexus_provider, 'activity': state['activity'] + [{
-            'step': 'Coding agent', 'status': 'completed', 'detail': mode,
-            'duration_ms': round((perf_counter() - started) * 1000),
-        }]}
+        generation = provider.generate(state['message'])
+        if generation.provider == 'demo':
+            mode = 'Offline fixed fixture returned; no AI call.'
+        else:
+            tokens = ''
+            if generation.input_tokens is not None and generation.output_tokens is not None:
+                tokens = f' ({generation.input_tokens} in / {generation.output_tokens} out tokens)'
+            mode = f'Bedrock Converse answered with {generation.model}{tokens}; code was not executed.'
+            if generation.truncated:
+                mode += ' Output hit the token limit.'
+        return {'answer': generation.text, 'provider': generation.provider, 'usage': generation.usage(),
+                'activity': state['activity'] + [{
+                    'step': 'Coding agent', 'status': 'completed', 'detail': mode,
+                    'duration_ms': round((perf_counter() - started) * 1000),
+                }]}
 
     def search(state: AgentState):
         started = perf_counter()
@@ -101,8 +126,25 @@ def build_graph(provider: CodingProvider, documents: DocumentStore | None = None
     def document(state: AgentState):
         started = perf_counter()
         if not state.get('document_id'):
-            raise ProviderError('Attach a PDF or text document first.', 'document_required', 422)
-        result = documents.answer(state['document_id'], state.get('document_token', ''), state['message'])
+            guidance = (
+                'Attach a PDF or TXT first, then ask again.\n\n'
+                'Auto-route sends document questions to the Document agent only when a file is attached. '
+                'Use **Attach** or **Explore sample document**, then rerun your question.'
+            )
+            return {
+                'answer': guidance,
+                'citations': [],
+                'provider': 'extractive',
+                'activity': state['activity'] + [{
+                    'step': 'Document retrieval', 'status': 'completed',
+                    'detail': 'No document attached; returned setup guidance instead of failing the route.',
+                    'duration_ms': round((perf_counter() - started) * 1000),
+                }],
+            }
+        result = documents.answer(
+            state['document_id'], state.get('document_token', ''), state['message'],
+            owner_id=state.get('user_id', ''),
+        )
         return {'answer': result['answer'], 'citations': result['citations'], 'provider': 'extractive',
                 'activity': state['activity'] + [{'step': 'Document retrieval', 'status': 'completed',
                 'detail': f"Retrieved {result['source_count']} page passages using local keyword matching.",
@@ -118,7 +160,8 @@ def build_graph(provider: CodingProvider, documents: DocumentStore | None = None
     def research_collect(state: AgentState):
         started = perf_counter()
         collection = collect_research(state['message'], state['plan'], documents,
-                                      state.get('document_id'), state.get('document_token', ''), search_provider)
+                                      state.get('document_id'), state.get('document_token', ''),
+                                      search_provider, owner_id=state.get('user_id', ''))
         return {'collection': collection, 'activity': state['activity'] + [{
             'step': 'Collect evidence', 'status': 'completed',
             'detail': f"Completed {len(collection['checks'])} retrieval checks; {len(collection['citations'])} distinct sources/passages.",

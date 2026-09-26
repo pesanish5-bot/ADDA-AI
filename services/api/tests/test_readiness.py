@@ -3,7 +3,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 
 from app.check_bedrock import check
 from app.config import Settings
-from app.providers import aws_error
+from app.providers import Generation, aws_error
 
 
 class LocalSession:
@@ -40,10 +40,10 @@ def test_configured_model_is_not_verified_without_inference(monkeypatch):
 
 def test_live_check_uses_two_distinct_prompts(monkeypatch):
     prompts = []
-    def answer(self, prompt):
+    def answer(self, prompt, **kwargs):
         prompts.append(prompt)
         assert self.settings.nexus_provider == 'bedrock'
-        return 'sample SDK answer'
+        return Generation('sample SDK answer', 'bedrock', 'test-model', 10, 20, 5, 'end_turn', False, 1)
     monkeypatch.setattr('app.check_bedrock.CodingProvider.generate', answer)
     report = check(Settings(_env_file=None, bedrock_model_id='test-model'), invoke=True, session=LocalSession())
     assert report['ready'] is True

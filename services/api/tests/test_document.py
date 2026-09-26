@@ -1,16 +1,16 @@
-from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 
 import pytest
 from pypdf import PdfWriter
 
-from app.agents.document import DocumentStore, MAX_BYTES, MAX_STREAM_BYTES
+from app.agents.document import MAX_BYTES, MAX_STREAM_BYTES, DocumentStore
 from app.providers import ProviderError
 
 
 def pdf_bytes(*texts):
     """Small real text PDFs, with no optional fixture-generation dependency."""
-    from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
     writer = PdfWriter()
     for text in texts:
         page = writer.add_blank_page(width=612, height=792)
@@ -69,6 +69,20 @@ def test_cross_document_and_missing_token_are_denied():
         assert failure.value.status == 404
     result = ask(store, second, 'apple')
     assert result['citations'] == []
+
+
+def test_document_is_scoped_to_authenticated_owner():
+    store = DocumentStore()
+    upload = store.ingest(b'Private roadmap details.', 'roadmap.txt', owner_id='user-a')
+    result = store.answer(
+        upload['document_id'], upload['document_token'], 'roadmap', owner_id='user-a'
+    )
+    assert result['source_count'] == 1
+    with pytest.raises(ProviderError) as denied:
+        store.answer(
+            upload['document_id'], upload['document_token'], 'roadmap', owner_id='user-b'
+        )
+    assert denied.value.status == 404
 
 
 @pytest.mark.parametrize('data,name,code', [
@@ -173,8 +187,8 @@ def test_weak_secondary_page_match_is_filtered():
 
 @pytest.mark.parametrize('compressed', [True, False], ids=['compressed', 'declared-length'])
 def test_pdf_stream_resource_limit_before_text_extraction(compressed, monkeypatch):
-    from pypdf.generic import DecodedStreamObject, NameObject
     from pypdf._page import PageObject
+    from pypdf.generic import DecodedStreamObject, NameObject
     writer = PdfWriter()
     page = writer.add_blank_page(width=100, height=100)
     stream = DecodedStreamObject()
