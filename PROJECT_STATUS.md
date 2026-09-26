@@ -22,20 +22,20 @@ and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
 
 ## UI parity
 
-- Phase 1 (branch `feat/bedrock-coding`, on top of `feat/production-baseline`):
+- Phase 1 (integrated on `codex/auth-bedrock-integration`):
   provider hardened (token cap, timeout, bounded retry, truncation flag, usage metadata
   in response and logs, 18 new tests → 107); template gained `BedrockMaxTokens`,
   `AlertEmail`-gated SNS + AWS Budget + Lambda/Bedrock alarms, and a cross-region IAM
-  grant. Model entitlement for `anthropic.claude-haiku-4-5` verified AUTHORIZED /
-  AVAILABLE in `ap-south-1` without invoking. **Waiting on approval** for the first
-  billable calls and for the alert email/budget amount; nothing paid has run.
+  grant. Claude Haiku 4.5 reported entitled but denied actual inference. APAC Amazon Nova
+  Lite passed two bounded live calls (103 input tokens each; 65/111 output tokens) and is
+  deployed with a $10 monthly budget and API/Bedrock alarms.
 - Integration branch combines `feat/bedrock-coding` and `feat/production-auth`; it still
   needs PR review/merge and deployment.
 
 ## Known Issues
 
-- Coding in the live demo is the fixture (`Provider=demo`). The conditional
-  `bedrock:InvokeModel` policy is deployed but inactive until `Provider=bedrock`.
+- Coding uses Bedrock (`apac.amazon.nova-lite-v1:0`). The SNS alarm subscription is pending
+  recipient confirmation at `pesanish5@gmail.com`.
 - Documents in memory are capped at 10 globally on the container path (set
   `DOCUMENT_BUCKET` for anything shared).
 - Rate limiter is per process; Lambda instances do not share counts.
@@ -58,7 +58,8 @@ and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
 - API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-25),
   HTTP API `pqrxb30pg5`, Lambda Python 3.13, Cognito user pool, encrypted/PITR DynamoDB
   profiles and private S3 documents bucket (1-day lifecycle). Running integration branch
-  with `AppEnv=staging`, `Provider=demo`, `AUTH_REQUIRED=true`, `DemoAccessToken=""`.
+  with `AppEnv=staging`, `Provider=bedrock`, APAC Nova Lite, `AUTH_REQUIRED=true`,
+  `DemoAccessToken=""` and a $10 monthly budget.
   Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
   Deploy path: `python scripts/build_lambda_package.py` → `aws cloudformation package`
   → `aws cloudformation deploy` (see OPERATIONS.md). No Docker or SAM CLI needed.
@@ -81,7 +82,8 @@ and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
 
 ## External Services
 
-- Amazon Bedrock: configured via `BEDROCK_MODEL_ID`; live inference **unverified**.
+- Amazon Bedrock: Nova Lite live inference verified locally and deployed; an authenticated
+  browser Coding request is the remaining end-to-end confirmation.
 - Tavily: key held in local `.env` and stack parameter; live Search verified earlier in
   the hackathon phase, not re-run today.
 - AWS account: profile `nexusai`, region `ap-south-1`.
@@ -95,8 +97,6 @@ and Amplify frontend were deployed on 2026-09-25; PR review/merge remains.
 
 ## Next Priority
 
-Review and merge PR #6, then run signup/verification/login/recovery with a real recipient
-and the authenticated cross-user document isolation matrix. Configure production SES
-before declaring production. Enable Bedrock only with an alert email
-and approved budget, then run the bounded model verification matrix. The BrandMark/fluid-
-orb workspace is preserved.
+Confirm the AWS SNS subscription email, run an authenticated browser Coding request and
+the cross-user document isolation matrix, then review/merge PR #6. Configure production
+SES before declaring production. The BrandMark/fluid-orb workspace is preserved.

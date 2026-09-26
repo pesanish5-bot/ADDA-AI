@@ -33,8 +33,9 @@ list unsafe-but-allowed settings.
 
 ## Alarms and dashboards
 
-Not yet created (Phase 1). Planned: 5xx rate > 5% over 5 min, p95 duration > 20 s,
-Lambda throttles > 0, Bedrock invocation count per hour, AWS Budget on the account.
+Deployed when `AlertEmail` is configured: Lambda errors, p95 duration, throttles, Bedrock
+invocation volume, SNS notifications, and an AWS monthly budget. Confirm the SNS email
+subscription after every new environment deployment.
 
 ## Deploy and rollback (current CloudFormation/Amplify path)
 

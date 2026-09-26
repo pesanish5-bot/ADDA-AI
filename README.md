@@ -7,11 +7,11 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 | Capability | Implemented behavior | Verification |
 | --- | --- | --- |
 | Workspace | Task history for the current page session, upload, citation cards, code highlighting/copy and completed activity | Local browser, types and production build checked |
-| Coding | LangGraph route to a labeled fixed fixture, or configured Bedrock Converse | Fixture verified; real Bedrock inference pending |
+| Coding | LangGraph route to Amazon Bedrock Converse with bounded output/retries | Nova Lite verified with two live requests and deployed |
 | Documents | PDF/TXT upload, local keyword retrieval and page-cited excerpts | Local API tests and browser flow verified |
 | Research | LangGraph plan → two evidence checks → cited extractive brief | Attached-document workflow verified locally |
 | Search | Tavily adapter with bounded results, optional Tavily summary, and real source URLs | Live Search verified on the canonical local API when `TAVILY_API_KEY` is set |
-| AWS | Amplify frontend + API Gateway/Lambda (`adda-ai-demo`, `ap-south-1`) | Deployed and health-checked; Coding remains demo provider; Bedrock live inference still pending |
+| AWS | Amplify + API Gateway/Lambda/Cognito/DynamoDB/S3 (`adda-ai-demo`, `ap-south-1`) | Authenticated staging deployed; Bedrock and $10 budget/alarms enabled |
 
 The `/login/`, `/register/`, `/verify-email/` and `/forgot-password/` flows use Amazon
 Cognito when configured. The workspace and application APIs require a signed Cognito
@@ -23,9 +23,9 @@ Documents and document Research work without an API key. They use real source te
 
 **Maturity: authenticated staging / production-hardening in progress.** Authentication,
 request controls, durable profiles and per-user document isolation are deployed and
-smoke-tested on the published AWS environment. Coding still uses the clearly labelled
-fixed fixture; live Bedrock inference remains externally unverified. A verified signup
-with a real recipient, restore drill and remaining production controls are still required.
+smoke-tested on the published AWS environment. Registration/email verification and two
+bounded Bedrock Nova Lite calls are verified. A restore drill and remaining production
+controls are still required.
 [PROJECT_STATUS.md](PROJECT_STATUS.md) is the source of truth.
 
 Documentation set:
@@ -82,7 +82,10 @@ The Lambda template stores documents in a private S3 bucket with one-day expiry 
 
 ## Live services
 
-Follow [AWS setup](docs/AWS_SETUP.md). AWS CLI is installed on the originating workstation and the named profile `nexusai` has passed STS identity verification; the default profile is not signed in. This does not prove Bedrock inference. The configured model still needs a real invocation check. Set `AWS_PROFILE=nexusai` in the backend terminal when using that profile, then select `NEXUS_PROVIDER=bedrock` only after verification.
+Follow [AWS setup](docs/AWS_SETUP.md). The deployed Coding provider is the APAC Amazon
+Nova Lite inference profile. Two bounded live Converse calls were verified before the
+switch. The configured $10 monthly budget and alarms are active; the SNS email subscription
+must be confirmed by its recipient.
 
 `TAVILY_API_KEY` enables Search and web Research. Put it only in `services/api/.env`, then restart the API. Do not put it in `apps/web/.env.local`. On the canonical pair (`127.0.0.1:3000` → `127.0.0.1:8000`) Search is live when `/health` reports `capabilities.search: true`. Search asks Tavily for at most five basic results plus a provider summary, and lists only HTTP(S) URLs Tavily returned. It does not independently read or verify full source pages. Health reports configuration/capabilities, while each chat response labels its actual provider (`demo`, `bedrock`, `extractive` or `tavily`). Health alone never proves Bedrock access.
 

@@ -5,7 +5,7 @@
 - Frontend: https://main.dvhyzvzxczywv.amplifyapp.com/
 - API: https://pqrxb30pg5.execute-api.ap-south-1.amazonaws.com
 - Region: `ap-south-1`; CloudFormation stack: `adda-ai-demo`; Amplify app: `dvhyzvzxczywv`.
-- Provider: `demo` for Coding. Search uses a backend-only Tavily key. Documents and
+- Provider: `bedrock` for Coding using `apac.amazon.nova-lite-v1:0`. Search uses a backend-only Tavily key. Documents and
   Research use real extracted evidence. Cognito authentication is mandatory for workspace
   API routes; no shared demo token is configured.
 - Verified on the published revision (Amplify job 13): health/readiness, anonymous 401,
@@ -20,7 +20,8 @@ The static Next.js frontend can be hosted on AWS Amplify Hosting. The FastAPI ba
 - Install AWS SAM CLI and Docker to build the Python 3.13 Lambda package in a compatible environment, or package the Python dependencies for the Lambda runtime and upload the ZIP to private S3 before deploying the template.
 - Generate an optional `DemoAccessToken` only if you want a shared gate. Leave it empty for a public hackathon demo. If set, keep it outside the repository and frontend build.
 - Optionally provide a backend-only Tavily key for live Search. Without it Search reports its configuration error.
-- Select `Provider=demo` until Bedrock model access, model ID, permissions, and real responses are verified in this account and region. The demo Coding response is a fixture.
+- Keep `Provider=demo` only for deliberate non-production smoke stacks. This staging stack
+  uses the live APAC Nova Lite inference profile after two bounded verification calls.
 
 ## API
 
@@ -38,12 +39,15 @@ sam deploy --guided --template-file .aws-sam/build/template.yaml
 
 ### Enabling real Bedrock Coding
 
-1. Zero-cost check of entitlement: `aws bedrock get-foundation-model-availability --model-id anthropic.claude-haiku-4-5-20251001-v1:0` should report `authorizationStatus: AUTHORIZED` and `entitlementAvailability: AVAILABLE`.
-2. Bounded local check (two small billable calls, ≤300 output tokens each): `python -m app.check_bedrock --profile nexusai --model global.anthropic.claude-haiku-4-5-20251001-v1:0 --invoke` from `services/api`.
-3. Deploy with `Provider=bedrock BedrockModelId=global.anthropic.claude-haiku-4-5-20251001-v1:0 AlertEmail=<ops email> MonthlyBudgetUsd=<amount>`. `AlertEmail` creates the SNS topic, AWS Budget (50/80/100 % actual, 100 % forecast) and the Lambda/Bedrock alarms; confirm the SNS subscription email.
+1. Check the intended model/profile is active in the target account and region.
+2. Run two bounded local calls: `python -m app.check_bedrock --profile nexusai --model apac.amazon.nova-lite-v1:0 --invoke` from `services/api`.
+3. Deploy with `Provider=bedrock BedrockModelId=apac.amazon.nova-lite-v1:0 AlertEmail=<ops email> MonthlyBudgetUsd=<amount>`. `AlertEmail` creates the SNS topic, AWS Budget (50/80/100 % actual, 100 % forecast) and the Lambda/Bedrock alarms; confirm the SNS subscription email.
 4. Verify through the application: `/health` shows `provider: bedrock` and the model; a browser Coding request returns `provider: bedrock` with `usage.input_tokens/output_tokens`; CloudWatch access log shows `model`, token counts and `provider_latency_ms`.
 
-Model choice: Claude Haiku 4.5 via the `global.` inference profile is the default (Converse and streaming support, strong coding quality for its price tier, available to this account in `ap-south-1`). `global.anthropic.claude-sonnet-4-6` is the upgrade path; `apac.anthropic.claude-sonnet-4-20250514-v1:0` keeps routing inside APAC if data residency matters. Global profiles may process requests in other AWS regions.
+Model choice: APAC Amazon Nova Lite is the verified cost-conscious default. Claude Haiku
+4.5 reported entitlement but returned access denied during live verification, so it is not
+used. Add other models only through a tested server-side allowlist with separate cost and
+latency limits. APAC profiles may route within their listed APAC regions.
 
 Per-request limits: `BEDROCK_MAX_TOKENS` (default 1500), read timeout 20 s, at most 2 attempts (retry only on throttling/transient errors), 12,000-character prompt cap, per-client rate limit 20 chat requests/min, API Gateway throttle 2 rps.
 
