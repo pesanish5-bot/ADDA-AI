@@ -8,6 +8,7 @@ from app.auth.store import MemoryUserStore
 from app.config import ConfigurationError, Settings
 from app.main import create_app
 from app.providers import DEMO_ANSWER, TRUNCATION_NOTE, CodingProvider, ProviderError
+from app.usage_store import MemoryUsageStore
 
 
 def bedrock_settings(**overrides) -> Settings:
@@ -222,7 +223,8 @@ def test_production_bedrock_failure_returns_error_not_fixture(monkeypatch):
         lambda *args, **kwargs: {'sub': 'test-user', 'email': 'test@example.com'},
     )
     client = TestClient(create_app(
-        settings, auth_service=AuthService(settings, MemoryUserStore())
+        settings, auth_service=AuthService(settings, MemoryUserStore()),
+        usage_store=MemoryUsageStore(),
     ))
     response = client.post(
         '/api/chat',
@@ -246,3 +248,13 @@ def test_out_of_range_limits_are_rejected_at_startup(field, value):
 def test_unknown_enabled_model_is_rejected_at_startup():
     with pytest.raises(ConfigurationError, match='unsupported aliases'):
         bedrock_settings(bedrock_enabled_models='nova-lite,untrusted-model').validate_for_environment()
+
+
+@pytest.mark.parametrize('overrides', [
+    {'model_daily_request_limit': 0},
+    {'model_daily_request_limit': 30, 'model_monthly_request_limit': 20},
+    {'model_daily_token_limit': 60_000, 'model_monthly_token_limit': 50_000},
+])
+def test_invalid_usage_limits_are_rejected_at_startup(overrides):
+    with pytest.raises(ConfigurationError):
+        bedrock_settings(**overrides).validate_for_environment()

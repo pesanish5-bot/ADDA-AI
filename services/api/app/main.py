@@ -16,12 +16,13 @@ from app.auth.service import AuthService
 from app.auth.tokens import verify_bearer_token
 from app.body_limit import BodyLimit
 from app.config import Settings
-from app.graph import build_graph
+from app.graph import build_graph, select_agent
 from app.observability import RequestContext, annotate, configure_logging, current_request_id, log_event
 from app.providers import CodingProvider, ProviderError
 from app.ratelimit import RateLimit, RateLimiter
-from app.schemas import ChatRequest, ChatResponse, TaskRecord
+from app.schemas import ChatRequest, ChatResponse, TaskRecord, UsageSummary
 from app.task_store import DynamoTaskStore, MemoryTaskStore, TaskStore
+from app.usage_store import DynamoUsageStore, MemoryUsageStore, QuotaExceeded, UsageStore
 
 
 def _request_id(request: Request) -> str:
@@ -39,6 +40,7 @@ def create_app(
     provider: CodingProvider | None = None,
     auth_service: AuthService | None = None,
     task_store: TaskStore | None = None,
+    usage_store: UsageStore | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
@@ -52,6 +54,10 @@ def create_app(
     tasks = task_store or (
         DynamoTaskStore(settings.auth_profiles_table, settings.cognito_pool_region)
         if settings.auth_profiles_table.strip() else MemoryTaskStore()
+    )
+    metering = usage_store or (
+        DynamoUsageStore(settings.auth_profiles_table, settings.cognito_pool_region)
+        if settings.auth_profiles_table.strip() else MemoryUsageStore()
     )
     app = FastAPI(title='ADDA AI API', version=settings.app_version,
                   docs_url=None if settings.is_production else '/docs',
@@ -218,6 +224,10 @@ def create_app(
     def list_tasks(archived: bool = False, claims: dict = Depends(authorize)):
         return tasks.list_tasks(task_owner(claims), archived=archived)
 
+    @app.get('/api/usage', response_model=UsageSummary)
+    def get_usage(claims: dict = Depends(authorize)):
+        return metering.get_usage(task_owner(claims), settings.model_usage_limits)
+
     @app.post('/api/tasks/{task_id}/archive', response_model=TaskRecord)
     def archive_task(task_id: str, claims: dict = Depends(authorize)):
         task = tasks.set_archived(task_owner(claims), task_id, archived=True)
@@ -246,6 +256,16 @@ def create_app(
         request_id = current_request_id()
         if body.document_id and not settings.document_enabled:
             raise ProviderError('Document storage is unavailable in this deployment.', 'documents_disabled', 503)
+        user_id = str(claims.get('sub') or '')
+        routed_agent, _ = select_agent(body.message, body.agent, body.document_id)
+        metered_request = bool(
+            user_id and settings.nexus_provider == 'bedrock' and routed_agent == 'coding'
+        )
+        if metered_request:
+            try:
+                metering.begin_request(user_id, settings.model_usage_limits)
+            except QuotaExceeded as exc:
+                raise ProviderError(str(exc), 'usage_quota_exceeded', 429) from None
         annotate(route='chat', requested_agent=body.agent, requested_model=body.model,
                  has_document=bool(body.document_id))
         state = graph.invoke({'message': body.message, 'requested_agent': body.agent,
@@ -260,10 +280,18 @@ def create_app(
             annotate(model=usage.get('model'), input_tokens=usage.get('input_tokens'),
                      output_tokens=usage.get('output_tokens'), provider_latency_ms=usage.get('latency_ms'),
                      stop_reason=usage.get('stop_reason'), attempts=usage.get('attempts'))
+            if metered_request:
+                try:
+                    metering.record_tokens(
+                        user_id, int(usage.get('input_tokens') or 0),
+                        int(usage.get('output_tokens') or 0),
+                    )
+                except Exception as exc:
+                    log_event('usage metering persistence failed', logging.ERROR,
+                              exception=type(exc).__name__, user_id=user_id)
         response = ChatResponse(request_id=request_id, agent=state['agent'], answer=state['answer'],
                                 provider=state['provider'], activity=state['activity'],
                                 citations=state.get('citations') or [], usage=usage)
-        user_id = str(claims.get('sub') or '')
         if user_id:
             try:
                 tasks.save_task(user_id, body.message, response.model_dump(mode='json'))

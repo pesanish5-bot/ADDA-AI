@@ -4,6 +4,8 @@ export type Provider = "demo" | "bedrock" | "extractive" | "tavily" | "local";
 export type Agent = "auto" | "coding" | "document" | "search" | "research";
 export type ModelChoice = "auto" | "nova-micro" | "nova-lite" | "nova-pro";
 export type ModelOption = { id: ModelChoice; label: string; description: string };
+export type UsagePeriod = { window: string; requests: number; request_limit: number; input_tokens: number; output_tokens: number; tokens: number; token_limit: number; resets_at: string };
+export type UsageSummary = { daily: UsagePeriod; monthly: UsagePeriod };
 export type Health = {
   status: "ok";
   provider: Provider;
@@ -60,6 +62,7 @@ async function request<T>(path: string, timeoutMs: number, init?: RequestInit, e
   }
 }
 export const getHealth = () => request<Health>("/health", 5_000);
+export const getUsage = () => request<UsageSummary>("/api/usage", 10_000);
 export const syncAuthProfile = (
   event: "login" | "register" | "refresh" | "verify" | "password_reset",
   displayName = "",

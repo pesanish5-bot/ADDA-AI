@@ -66,3 +66,19 @@ class TaskRecord(BaseModel):
     created_at: str
     updated_at: str
     archived: bool = False
+
+
+class UsagePeriod(BaseModel):
+    window: str
+    requests: int
+    request_limit: int
+    input_tokens: int
+    output_tokens: int
+    tokens: int
+    token_limit: int
+    resets_at: str
+
+
+class UsageSummary(BaseModel):
+    daily: UsagePeriod
+    monthly: UsagePeriod

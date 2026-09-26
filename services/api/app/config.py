@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     bedrock_timeout_seconds: int = 20
     # Attempts including the first; only throttling / transient service errors are retried.
     bedrock_max_attempts: int = 2
+    model_daily_request_limit: int = 25
+    model_monthly_request_limit: int = 250
+    model_daily_token_limit: int = 50_000
+    model_monthly_token_limit: int = 500_000
 
     allowed_origins: str = 'http://localhost:3000,http://127.0.0.1:3000'
     demo_access_token: str = ''
@@ -73,6 +77,15 @@ class Settings(BaseSettings):
         return list(dict.fromkeys(
             alias.strip().lower() for alias in self.bedrock_enabled_models.split(',') if alias.strip()
         ))
+
+    @property
+    def model_usage_limits(self) -> dict[str, int]:
+        return {
+            'daily_requests': self.model_daily_request_limit,
+            'monthly_requests': self.model_monthly_request_limit,
+            'daily_tokens': self.model_daily_token_limit,
+            'monthly_tokens': self.model_monthly_token_limit,
+        }
 
     @property
     def cognito_pool_region(self) -> str:
@@ -120,6 +133,12 @@ class Settings(BaseSettings):
             problems.append('BEDROCK_TIMEOUT_SECONDS must be between 1 and 25 to fit the API time budget.')
         if not 1 <= self.bedrock_max_attempts <= 3:
             problems.append('BEDROCK_MAX_ATTEMPTS must be between 1 and 3.')
+        if any(value < 1 for value in self.model_usage_limits.values()):
+            problems.append('All model usage limits must be positive.')
+        if self.model_monthly_request_limit < self.model_daily_request_limit:
+            problems.append('MODEL_MONTHLY_REQUEST_LIMIT must be at least the daily limit.')
+        if self.model_monthly_token_limit < self.model_daily_token_limit:
+            problems.append('MODEL_MONTHLY_TOKEN_LIMIT must be at least the daily limit.')
         if self.app_env != 'development':
             insecure = [o for o in self.origins if not o.startswith('https://')]
             if insecure:

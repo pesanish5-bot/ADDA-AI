@@ -7,7 +7,7 @@ import WorkspaceOrb from "../components/ui/workspace-orb";
 import BrandMark from "../components/brand-mark";
 import AuthGate from "../components/AuthGate";
 import { useAuth } from "../components/AuthProvider";
-import { ApiError, archiveTask, deleteDocument, getHealth, listTasks, loadDemoDocument, removeTask, restoreTask, sendChat, uploadDocument, type Agent, type ChatResponse, type DocumentRef, type Health, type ModelChoice, type Provider, type TaskRecord } from "../lib/api";
+import { ApiError, archiveTask, deleteDocument, getHealth, getUsage, listTasks, loadDemoDocument, removeTask, restoreTask, sendChat, uploadDocument, type Agent, type ChatResponse, type DocumentRef, type Health, type ModelChoice, type Provider, type TaskRecord, type UsageSummary } from "../lib/api";
 
 const specialists = [
   { id: "coding", mark: "</>", name: "Coding", description: "Build, explain & debug" },
@@ -59,6 +59,12 @@ function modelChoiceFromId(model?: string): ModelChoice {
   if (model?.includes("nova-pro")) return "nova-pro";
   if (model?.includes("nova-lite")) return "nova-lite";
   return "auto";
+}
+function compactNumber(value: number) {
+  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+function resetLabel(value: string) {
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 function safeUrl(url?: string) { return url && /^https?:\/\/./i.test(url) ? url : undefined; }
 function hostOf(url?: string) {
@@ -130,6 +136,8 @@ function Workspace() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
+  const [usageError, setUsageError] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const runAbort = useRef<AbortController | null>(null);
   const historyReady = useRef(false);
@@ -141,6 +149,7 @@ function Workspace() {
     return Boolean(health?.capabilities[id]);
   };
   async function checkConnection() { setConnection("Connecting"); try { setHealth(await getHealth()); setConnection("Workspace connected"); } catch { setHealth(null); setConnection("Workspace offline"); } }
+  async function refreshUsage() { try { setUsageSummary(await getUsage()); setUsageError(false); } catch { setUsageError(true); } }
   async function handleSignOut() {
     await signOut();
     window.location.replace("/login/");
@@ -152,6 +161,7 @@ function Workspace() {
     if (restored.length) setHistory(restored);
     historyReady.current = true;
     void checkConnection();
+    void refreshUsage();
     void Promise.all([listTasks(false), listTasks(true)])
       .then(([recent, archived]) => {
         setHistory((current) => {
@@ -294,12 +304,14 @@ function Workspace() {
       const task: Task = { id: response.request_id, prompt: message.trim(), response, created_at: now, updated_at: now, archived: false };
       setSelected(task);
       setHistory((items) => [task, ...items].slice(0, HISTORY_LIMIT));
+      if (response.usage) void refreshUsage();
     } catch (failure) {
       if (controller.signal.aborted) return;
       if (failure instanceof ApiError && failure.status === 401) {
         window.location.replace("/login/");
         return;
       }
+      if (failure instanceof ApiError && failure.status === 429) void refreshUsage();
       setError(failure instanceof Error ? failure.message : "Something went wrong. Please try again.");
     } finally {
       if (runAbort.current === controller) {
@@ -354,12 +366,23 @@ function Workspace() {
         </section>
       </div>
       <div className="sidebar-bottom account-panel">
-        <button type="button" className="account-trigger" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>
+        <button type="button" className="account-trigger" aria-expanded={accountOpen} onClick={() => { setAccountOpen((open) => !open); if (!accountOpen) void refreshUsage(); }}>
           <span className="session-avatar account-initial" aria-hidden="true">{(displayName[0] || "A").toUpperCase()}</span>
           <span className="account-copy"><strong>{displayName}</strong><small>{user?.email || "Signed in"}</small></span>
         </button>
         {accountOpen && (
           <div className="account-menu" role="menu">
+            <div className="account-usage" role="none">
+              <strong>Usage</strong>
+              {usageSummary ? <>
+                <div className="usage-line"><span>Today</span><span>{usageSummary.daily.requests}/{usageSummary.daily.request_limit} requests</span></div>
+                <div className="usage-meter" aria-label={`${usageSummary.daily.tokens} of ${usageSummary.daily.token_limit} daily tokens used`}><i style={{ width: `${Math.min(100, usageSummary.daily.tokens / usageSummary.daily.token_limit * 100)}%` }} /></div>
+                <small>{compactNumber(usageSummary.daily.tokens)} / {compactNumber(usageSummary.daily.token_limit)} tokens · resets {resetLabel(usageSummary.daily.resets_at)}</small>
+                <div className="usage-line"><span>This month</span><span>{usageSummary.monthly.requests}/{usageSummary.monthly.request_limit} requests</span></div>
+                <div className="usage-meter" aria-label={`${usageSummary.monthly.tokens} of ${usageSummary.monthly.token_limit} monthly tokens used`}><i style={{ width: `${Math.min(100, usageSummary.monthly.tokens / usageSummary.monthly.token_limit * 100)}%` }} /></div>
+                <small>{compactNumber(usageSummary.monthly.tokens)} / {compactNumber(usageSummary.monthly.token_limit)} tokens · resets {resetLabel(usageSummary.monthly.resets_at)}</small>
+              </> : <small>{usageError ? "Usage is temporarily unavailable." : "Loading usage…"}</small>}
+            </div>
             <button type="button" role="menuitem" onClick={() => void handleSignOut()}>Sign out</button>
           </div>
         )}

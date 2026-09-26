@@ -40,6 +40,22 @@ Parameters:
     MinValue: 1
     MaxValue: 8000
     Description: Hard cap on generated tokens per Coding request.
+  ModelDailyRequestLimit:
+    Type: Number
+    Default: 25
+    MinValue: 1
+  ModelMonthlyRequestLimit:
+    Type: Number
+    Default: 250
+    MinValue: 1
+  ModelDailyTokenLimit:
+    Type: Number
+    Default: 50000
+    MinValue: 1
+  ModelMonthlyTokenLimit:
+    Type: Number
+    Default: 500000
+    MinValue: 1
   AlertEmail:
     Type: String
     Default: ''
@@ -181,6 +197,10 @@ Resources:
           BEDROCK_MAX_TOKENS: !Ref BedrockMaxTokens
           BEDROCK_TIMEOUT_SECONDS: '20'
           BEDROCK_MAX_ATTEMPTS: '2'
+          MODEL_DAILY_REQUEST_LIMIT: !Ref ModelDailyRequestLimit
+          MODEL_MONTHLY_REQUEST_LIMIT: !Ref ModelMonthlyRequestLimit
+          MODEL_DAILY_TOKEN_LIMIT: !Ref ModelDailyTokenLimit
+          MODEL_MONTHLY_TOKEN_LIMIT: !Ref ModelMonthlyTokenLimit
           ALLOWED_ORIGINS: !Ref FrontendOrigin
           DEMO_ACCESS_TOKEN: !Ref DemoAccessToken
           TAVILY_API_KEY: !Ref TavilyApiKey
@@ -207,6 +227,7 @@ Resources:
                 - dynamodb:DeleteItem
                 - dynamodb:Query
                 - dynamodb:BatchWriteItem
+                - dynamodb:TransactWriteItems
               Resource: !GetAtt AuthProfilesTable.Arn
         - !If
           - UseBedrock

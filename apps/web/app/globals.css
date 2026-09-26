@@ -287,6 +287,12 @@ textarea { display: block; width: calc(100% - 36px); margin: 12px 18px; padding:
 .account-menu { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden; }
 .account-menu button { width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font-size: 12px; padding: 10px 12px; cursor: pointer; }
 .account-menu button:hover { background: var(--panel-2); color: var(--teal); }
+.account-usage { display: grid; gap: 6px; padding: 12px; border-bottom: 1px solid var(--line); }
+.account-usage > strong { margin-bottom: 3px; font-size: 11px; }
+.account-usage small { color: var(--muted); font-size: 9px; }
+.usage-line { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 9px; }
+.usage-meter { height: 4px; overflow: hidden; border-radius: 99px; background: var(--panel-2); }
+.usage-meter i { display: block; height: 100%; border-radius: inherit; background: var(--teal); }
 .sidebar-bottom strong { font-size: 11px; font-weight: 600; }
 .sidebar-bottom p { font-size: 10px; margin-top: 3px; }
 .topbar { height: 64px; background: #fffffff5; backdrop-filter: none; padding: 0 32px; font-size: 12px; }
@@ -414,6 +420,7 @@ textarea::placeholder { color: #9a9faa; }
   h1 { font-size: 28px; }
   .intro > p { font-size: 13px; }
   .sidebar-bottom { display: none; }
+  .workspace.nav-open .sidebar-bottom { display: flex; margin-top: 18px; }
   .nav-open .new-task { margin-top: 20px; }
   .menu-button { color: #6b7280; background: white; padding: 7px 10px; }
   .connection { font-size: 10px; }
