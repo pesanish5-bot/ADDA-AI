@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AuthGate from "../../components/AuthGate";
 import BrandMark from "../../components/brand-mark";
-import { getAdminOverview, getBillingReadiness, type AdminOverview, type BillingReadiness } from "../../lib/api";
+import { getAdminOverview, getBillingReadiness, getProfile, type AdminOverview, type BillingReadiness } from "../../lib/api";
 
 function date(value?: string | null) {
   if (!value) return "—";
@@ -17,7 +18,26 @@ function compact(value: number) {
 }
 
 export default function AdminPage() {
-  return <AuthGate><Admin /></AuthGate>;
+  return <AuthGate><AdminAccess /></AuthGate>;
+}
+
+function AdminAccess() {
+  const router = useRouter();
+  const [access, setAccess] = useState<"checking" | "allowed" | "denied" | "error">("checking");
+
+  useEffect(() => {
+    let active = true;
+    void getProfile().then((profile) => {
+      if (!active) return;
+      if (profile.is_admin) setAccess("allowed");
+      else { setAccess("denied"); router.replace("/"); }
+    }).catch(() => { if (active) setAccess("error"); });
+    return () => { active = false; };
+  }, [router]);
+
+  if (access === "allowed") return <Admin />;
+  if (access === "error") return <div className="auth-loading" role="alert">Administrator access could not be verified. <Link href="/">Return to workspace</Link></div>;
+  return <div className="auth-loading" role="status" aria-live="polite">{access === "denied" ? "Returning to workspace…" : "Checking administrator access…"}</div>;
 }
 
 function Admin() {
