@@ -56,3 +56,18 @@ def test_non_admin_and_anonymous_users_cannot_read_admin_data():
     )
     assert response.status_code == 403
     assert response.json()['detail']['code'] == 'admin_required'
+    assert client.get('/api/admin/billing-readiness').status_code == 401
+
+
+def test_admin_billing_readiness_is_sanitized_when_disabled():
+    response = _client().get(
+        '/api/admin/billing-readiness', headers=_headers('owner', 'owner@example.com')
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        'status': 'disabled', 'configured': False, 'secret_source': 'none',
+        'checks': [
+            {'check': 'price_configured', 'ok': False},
+            {'check': 'secure_secret_source', 'ok': True},
+        ],
+    }

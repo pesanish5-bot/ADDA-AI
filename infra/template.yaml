@@ -72,16 +72,10 @@ Parameters:
     Type: Number
     Default: 2000000
     MinValue: 1
-  StripeSecretKey:
+  StripeSecretArn:
     Type: String
-    NoEcho: true
     Default: ''
-    Description: Server-only Stripe secret key. Empty keeps paid billing disabled.
-  StripeWebhookSecret:
-    Type: String
-    NoEcho: true
-    Default: ''
-    Description: Signing secret for the Stripe webhook endpoint.
+    Description: ARN of a Secrets Manager JSON secret with secret_key and webhook_secret. Empty keeps billing disabled.
   StripeProPriceId:
     Type: String
     Default: ''
@@ -118,6 +112,7 @@ Parameters:
     Description: Optional backend-only Search API key.
 Conditions:
   UseBedrock: !Equals [!Ref Provider, bedrock]
+  HasStripeSecret: !Not [!Equals [!Ref StripeSecretArn, '']]
   HasAlerts: !Not [!Equals [!Ref AlertEmail, '']]
   BedrockAlerts: !And [!Condition UseBedrock, !Condition HasAlerts]
 Resources:
@@ -253,8 +248,7 @@ Resources:
           PRO_MODEL_MONTHLY_REQUEST_LIMIT: !Ref ProModelMonthlyRequestLimit
           PRO_MODEL_DAILY_TOKEN_LIMIT: !Ref ProModelDailyTokenLimit
           PRO_MODEL_MONTHLY_TOKEN_LIMIT: !Ref ProModelMonthlyTokenLimit
-          STRIPE_SECRET_KEY: !Ref StripeSecretKey
-          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
+          STRIPE_SECRET_ARN: !Ref StripeSecretArn
           STRIPE_PRO_PRICE_ID: !Ref StripeProPriceId
           ADMIN_EMAILS: !Ref AdminEmails
           ALLOWED_ORIGINS: !Ref FrontendOrigin
@@ -297,6 +291,13 @@ Resources:
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:bedrock:*::foundation-model/*'
                   - !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*'
+          - !Ref AWS::NoValue
+        - !If
+          - HasStripeSecret
+          - Statement:
+              - Effect: Allow
+                Action: [secretsmanager:GetSecretValue]
+                Resource: !Ref StripeSecretArn
           - !Ref AWS::NoValue
       Events:
         Root:

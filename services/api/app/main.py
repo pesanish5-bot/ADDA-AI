@@ -26,6 +26,11 @@ from app.billing import (
     process_stripe_event,
     verify_stripe_event,
 )
+from app.billing_secrets import (
+    AwsBillingSecretProvider,
+    BillingSecretProvider,
+    StaticBillingSecretProvider,
+)
 from app.body_limit import BodyLimit
 from app.config import Settings
 from app.graph import build_graph, select_agent
@@ -55,6 +60,7 @@ def create_app(
     usage_store: UsageStore | None = None,
     billing_store: BillingStore | None = None,
     billing_gateway: BillingGateway | None = None,
+    billing_secret_provider: BillingSecretProvider | None = None,
     admin_directory: AdminDirectory | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
@@ -79,13 +85,25 @@ def create_app(
         if settings.stripe_configured and settings.auth_profiles_table.strip()
         else MemoryBillingStore()
     )
-    stripe = billing_gateway or (
-        StripeGateway(
-            settings.stripe_secret_key,
-            settings.origins[0],
-            settings.stripe_pro_price_id,
-        ) if settings.stripe_configured else None
-    )
+    secret_provider = billing_secret_provider
+    if settings.stripe_configured and not secret_provider:
+        secret_provider = (
+            AwsBillingSecretProvider(
+                settings.stripe_secret_arn, settings.aws_region
+            ) if settings.stripe_secret_arn.strip() else StaticBillingSecretProvider(
+                settings.stripe_secret_key, settings.stripe_webhook_secret
+            )
+        )
+
+    def stripe_gateway() -> BillingGateway | None:
+        if billing_gateway:
+            return billing_gateway
+        if not settings.stripe_configured or not secret_provider:
+            return None
+        credentials = secret_provider.get()
+        return StripeGateway(
+            credentials.secret_key, settings.origins[0], settings.stripe_pro_price_id
+        )
     directory = admin_directory or (
         DynamoAdminDirectory(settings.auth_profiles_table, settings.cognito_pool_region)
         if settings.auth_profiles_table.strip()
@@ -305,6 +323,38 @@ def create_app(
             'events': events,
         }
 
+    @app.get('/api/admin/billing-readiness')
+    def admin_billing_readiness(_claims: dict = Depends(require_admin)):
+        checks = [
+            {'check': 'price_configured', 'ok': bool(settings.stripe_pro_price_id.strip())},
+            {'check': 'secure_secret_source', 'ok': (
+                settings.stripe_uses_managed_secret or not settings.stripe_configured
+            )},
+        ]
+        if not settings.stripe_configured:
+            return {
+                'status': 'disabled', 'configured': False,
+                'secret_source': settings.stripe_secret_source, 'checks': checks,
+            }
+        try:
+            gateway = stripe_gateway()
+            offer = gateway.get_pro_offer() if gateway else None
+            checks.extend([
+                {'check': 'credentials_available', 'ok': gateway is not None},
+                {'check': 'stripe_price_reachable', 'ok': bool(offer and offer.get('amount'))},
+            ])
+            status = 'ready' if all(item['ok'] for item in checks) else 'degraded'
+        except BillingError:
+            checks.extend([
+                {'check': 'credentials_available', 'ok': False},
+                {'check': 'stripe_price_reachable', 'ok': False},
+            ])
+            status = 'degraded'
+        return {
+            'status': status, 'configured': True,
+            'secret_source': settings.stripe_secret_source, 'checks': checks,
+        }
+
     @app.get('/api/tasks', response_model=list[TaskRecord])
     def list_tasks(archived: bool = False, claims: dict = Depends(authorize)):
         return tasks.list_tasks(task_owner(claims), archived=archived)
@@ -321,6 +371,12 @@ def create_app(
         invoices: list[dict] = []
         pro_offer: dict | None = None
         customer_id = str(record.get('customer_id') or '')
+        try:
+            stripe = stripe_gateway()
+        except BillingError as exc:
+            stripe = None
+            log_event('billing credentials unavailable', logging.WARNING,
+                      exception=type(exc).__name__, user_id=user_id)
         if stripe:
             try:
                 pro_offer = stripe.get_pro_offer()
@@ -336,6 +392,7 @@ def create_app(
 
     @app.post('/api/billing/checkout', response_model=BillingRedirect)
     def create_checkout(claims: dict = Depends(authorize)):
+        stripe = stripe_gateway()
         if not stripe:
             raise BillingError(
                 'Paid plans are not available yet.', 'billing_not_configured', 503
@@ -357,6 +414,7 @@ def create_app(
 
     @app.post('/api/billing/portal', response_model=BillingRedirect)
     def create_billing_portal(claims: dict = Depends(authorize)):
+        stripe = stripe_gateway()
         if not stripe:
             raise BillingError(
                 'Billing management is not available yet.', 'billing_not_configured', 503
@@ -377,8 +435,12 @@ def create_app(
             raise BillingError(
                 'Billing webhook is not configured.', 'billing_not_configured', 503
             )
+        if not secret_provider:
+            raise BillingError(
+                'Billing webhook is not configured.', 'billing_not_configured', 503
+            )
         event = verify_stripe_event(
-            await request.body(), stripe_signature, settings.stripe_webhook_secret
+            await request.body(), stripe_signature, secret_provider.get().webhook_secret
         )
         processed = process_stripe_event(event, billing, settings.stripe_pro_price_id)
         return {'received': True, 'processed': processed}

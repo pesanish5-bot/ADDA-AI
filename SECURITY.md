@@ -24,9 +24,11 @@ reporting or a direct message). Do not open public issues for security problems.
   execution, no arbitrary URL fetching. Document text is not sent to a model today.
 - **Rate limiting**: API Gateway route throttle plus a per-client, per-process limiter
   (chat 20/min, upload 10/min). Not a quota system.
-- **Secrets**: none in the repository. Local `.env` files are ignored. Cloud values are
-  CloudFormation `NoEcho` parameters → Lambda environment (to be moved to Secrets Manager
-  in Phase 6). Never place provider keys in `NEXT_PUBLIC_*` variables.
+- **Secrets**: none in the repository. Local `.env` files are ignored. Stripe credentials
+  are loaded at runtime from an explicitly authorized AWS Secrets Manager ARN and cached
+  briefly in process; staging/production reject inline Stripe keys. Other optional cloud
+  provider keys still use `NoEcho` parameters pending Phase 6 completion. Never place
+  provider keys in `NEXT_PUBLIC_*` variables.
 - **Logging**: JSON access logs with request id, method, path, status, duration, agent,
   provider and error code. Never prompts, document content, tokens or credentials; a test
   enforces this.

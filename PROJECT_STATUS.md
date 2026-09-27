@@ -12,6 +12,8 @@ Amplify frontend were updated on 2026-09-27; PR review/merge remains.
 Stripe billing and the dedicated Settings foundation are implemented, tested and deployed
 in fail-closed mode. Live billing intentionally remains disabled until real Stripe
 test/live configuration and commercial policies are supplied.
+The next activation layer now uses runtime AWS Secrets Manager retrieval instead of raw
+Stripe CloudFormation parameters and adds a protected, sanitized billing-readiness view.
 
 A read-only admin console is deployed for `pesanish5@gmail.com`. It exposes bounded user,
 plan, usage and authentication-event summaries, never passwords, tokens, prompts or
@@ -74,7 +76,9 @@ documents. Mutating account controls are deliberately not part of this first adm
 ## Security Issues
 
 - Resolved and deployed: fail-closed Cognito authentication and per-user document ownership.
-- Medium: secrets as CloudFormation parameters → env vars. Fix: Phase 6 Secrets Manager.
+- Partially resolved: Stripe credentials now use runtime Secrets Manager retrieval. The
+  optional Tavily key and demo gate remain CloudFormation `NoEcho` parameters pending the
+  rest of Phase 6.
 - Medium: no CSP on the static site. Fix: Phase 7.
 - Details and strengths: `docs/PRODUCTION_AUDIT.md`, `SECURITY.md`.
 

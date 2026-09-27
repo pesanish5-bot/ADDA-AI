@@ -71,13 +71,20 @@ Search, document retrieval and extractive Research are not counted as model usag
 
 ### Stripe subscriptions
 
-Billing is fail-closed and disabled unless `StripeSecretKey`, `StripeWebhookSecret` and
-`StripeProPriceId` are all supplied. Create one recurring Pro Price in Stripe, configure
+Billing is fail-closed and disabled unless `StripeSecretArn` and `StripeProPriceId` are
+both supplied. The referenced AWS Secrets Manager value must be JSON with `secret_key`
+and `webhook_secret` fields. Lambda retrieves and caches it at runtime through a
+least-privilege `secretsmanager:GetSecretValue` grant; the credentials are never stored
+in CloudFormation parameters or Lambda environment variables. Inline Stripe credentials
+are accepted only in local development and rejected in staging/production. Create one
+recurring Pro Price in Stripe, configure
 the Stripe customer portal, and register
 `POST https://<api-host>/api/billing/webhook` for at least
 `checkout.session.completed`, `customer.subscription.created`,
 `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid` and
-`invoice.payment_failed`. Store secrets outside git and pass them only to the backend.
+`invoice.payment_failed`. Store secrets outside git and never paste them into frontend,
+deployment parameter, source-control or chat fields. The protected admin console reports
+only sanitized billing readiness checks.
 
 Pro access is never granted by a browser redirect. The signed webhook must report an
 active or trialing subscription with the exact configured Price ID. Processed event IDs,

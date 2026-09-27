@@ -56,7 +56,9 @@ class Settings(BaseSettings):
     auth_profiles_table: str = ''
     auth_dev_jwt_secret: str = ''
     admin_emails: str = ''
-    # Stripe Billing is off unless all three server-only values are configured.
+    # Deployed environments load Stripe secrets at runtime from AWS Secrets Manager.
+    stripe_secret_arn: str = ''
+    # Inline values exist for local development and tests only.
     stripe_secret_key: str = ''
     stripe_webhook_secret: str = ''
     stripe_pro_price_id: str = ''
@@ -106,11 +108,22 @@ class Settings(BaseSettings):
 
     @property
     def stripe_configured(self) -> bool:
-        return bool(
-            self.stripe_secret_key.strip()
-            and self.stripe_webhook_secret.strip()
-            and self.stripe_pro_price_id.strip()
+        has_secrets = bool(self.stripe_secret_arn.strip()) or bool(
+            self.stripe_secret_key.strip() and self.stripe_webhook_secret.strip()
         )
+        return bool(has_secrets and self.stripe_pro_price_id.strip())
+
+    @property
+    def stripe_secret_source(self) -> str:
+        if self.stripe_secret_arn.strip():
+            return 'aws_secrets_manager'
+        if self.stripe_secret_key.strip() or self.stripe_webhook_secret.strip():
+            return 'local'
+        return 'none'
+
+    @property
+    def stripe_uses_managed_secret(self) -> bool:
+        return bool(self.stripe_secret_arn.strip())
 
     @property
     def cognito_pool_region(self) -> str:
@@ -170,10 +183,23 @@ class Settings(BaseSettings):
             problems.append('PRO_MODEL_MONTHLY_REQUEST_LIMIT must be at least the daily limit.')
         if self.pro_model_monthly_token_limit < self.pro_model_daily_token_limit:
             problems.append('PRO_MODEL_MONTHLY_TOKEN_LIMIT must be at least the daily limit.')
-        stripe_values = [self.stripe_secret_key, self.stripe_webhook_secret, self.stripe_pro_price_id]
-        if any(value.strip() for value in stripe_values) and not all(value.strip() for value in stripe_values):
-            problems.append('Stripe billing requires STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_PRO_PRICE_ID together.')
+        inline_stripe = [self.stripe_secret_key, self.stripe_webhook_secret]
+        if any(value.strip() for value in inline_stripe) and not all(value.strip() for value in inline_stripe):
+            problems.append('Local Stripe billing requires STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET together.')
+        if self.stripe_secret_arn.strip() and any(value.strip() for value in inline_stripe):
+            problems.append('Configure either STRIPE_SECRET_ARN or local Stripe secrets, not both.')
+        if (self.stripe_secret_arn.strip() or all(value.strip() for value in inline_stripe)) and not self.stripe_pro_price_id.strip():
+            problems.append('Stripe billing credentials require STRIPE_PRO_PRICE_ID.')
+        if self.stripe_pro_price_id.strip() and not (
+            self.stripe_secret_arn.strip() or all(value.strip() for value in inline_stripe)
+        ):
+            problems.append('STRIPE_PRO_PRICE_ID requires Stripe billing credentials.')
         if self.app_env != 'development':
+            if any(value.strip() for value in inline_stripe):
+                problems.append(
+                    'STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are development-only; '
+                    'use STRIPE_SECRET_ARN in deployed environments.'
+                )
             insecure = [o for o in self.origins if not o.startswith('https://')]
             if insecure:
                 problems.append(f'ALLOWED_ORIGINS must be https in {self.app_env}: {", ".join(insecure)}')
