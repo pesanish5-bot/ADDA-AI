@@ -91,7 +91,7 @@ documents. Mutating account controls are deliberately not part of this first adm
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (job 21 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  (job 22 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
   manual light/dark modes, five persistent accent choices, private history, Archive and
   the verified model selector, daily/monthly account usage, `/settings/` and `/admin/`.
   URL https://main.dvhyzvzxczywv.amplifyapp.com/
@@ -110,7 +110,8 @@ documents. Mutating account controls are deliberately not part of this first adm
   disabled webhook → 503; `/settings/` → 200 with production API, Plan & Usage, Checkout
   and portal references in the served bundle. Anonymous history → 401;
   root/login/register/recovery routes → 200. Published bundles contain the Archive,
-  history-sync, usage and attribution UI. Automated tests cover
+  history-sync, usage and attribution UI. Public Privacy, Terms, Refunds and Acceptable
+  Use routes return 200 and contain the expected pre-launch notices. Automated tests cover
   cross-user task and quota isolation. A temporary live DynamoDB smoke record confirmed
   atomic daily/monthly request and exact token accumulation and was then deleted. An
   authenticated live usage/history/archive click-through and cross-user document smoke
