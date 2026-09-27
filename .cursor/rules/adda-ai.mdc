@@ -1,0 +1,7 @@
+# ADDA AI — do not forget
+
+- Product name is **ADDA AI**. Live UI: https://main.dvhyzvzxczywv.amplifyapp.com/
+- Frontend visual source of truth is the deployed Amplify build / `feat/production-baseline` (BrandMark, fluid orb, specialists).
+- Auth branch: `feat/production-auth`. Do not redesign the workspace.
+- No Explore Demo / guest / Account preview bypass. Cognito required for workspace.
+- Wrong repo: `C:\Hackathons\handoff-test-20260918` is a disposable hello-world test, not ADDA AI.

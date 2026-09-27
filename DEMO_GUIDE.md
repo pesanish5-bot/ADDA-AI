@@ -91,4 +91,4 @@ Expected: **ADDA → Research Agent**; **Research evidence brief** with **Extrac
 
 ## Known limitation
 
-Coding currently uses the labelled **demo** provider because live Amazon Bedrock inference is unavailable / unverified. Do not say Coding is a model answer. There is no deployed URL yet. Documents are not embeddings, OCR, or LLM synthesis. Session history and uploads do not survive reload or API restart.
+Coding currently uses the labelled **demo** provider because live Amazon Bedrock inference is unavailable / unverified. Do not say Coding is a model answer. Hosted demo URLs (when used): frontend `https://main.dvhyzvzxczywv.amplifyapp.com/`, API `https://pqrxb30pg5.execute-api.ap-south-1.amazonaws.com`. The public demo currently needs **no access token**. Documents are not embeddings, OCR, or LLM synthesis. Session history and uploads do not survive reload or API restart.

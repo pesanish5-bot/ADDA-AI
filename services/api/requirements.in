@@ -7,3 +7,4 @@ langgraph>=1,<2
 boto3[crt]>=1.40,<2
 pydantic-settings>=2,<3
 mangum>=0.19,<1
+PyJWT[crypto]>=2.8,<3

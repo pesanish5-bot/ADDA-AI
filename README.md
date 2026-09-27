@@ -6,18 +6,37 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 
 | Capability | Implemented behavior | Verification |
 | --- | --- | --- |
-| Workspace | Task history for the current page session, upload, citation cards, code highlighting/copy and completed activity | Local browser, types and production build checked |
-| Coding | LangGraph route to a labeled fixed fixture, or configured Bedrock Converse | Fixture verified; real Bedrock inference pending |
+| Workspace | Private per-account task history (bounded to 100), Archive/restore/delete, upload, citation cards, code highlighting/copy, and daily/monthly model usage | API isolation/quota tests, types, production build and staging deploy checked |
+| Coding | LangGraph route to a server-controlled Amazon Bedrock model catalog with automatic/manual routing, bounded output and retries | Nova Micro, Lite and Pro verified with live requests and deployed |
 | Documents | PDF/TXT upload, local keyword retrieval and page-cited excerpts | Local API tests and browser flow verified |
 | Research | LangGraph plan → two evidence checks → cited extractive brief | Attached-document workflow verified locally |
 | Search | Tavily adapter with bounded results, optional Tavily summary, and real source URLs | Live Search verified on the canonical local API when `TAVILY_API_KEY` is set |
-| AWS | SAM API/Lambda and Amplify configuration prepared | Not deployed; Docker/SAM path unverified |
+| AWS | Amplify + API Gateway/Lambda/Cognito/DynamoDB/S3 (`adda-ai-demo`, `ap-south-1`) | Authenticated staging deployed; Bedrock and $10 budget/alarms enabled |
+| Billing foundation | Stripe Checkout, customer portal, invoices, webhook-driven Pro entitlement and plan quotas | Deployed and tested fail-closed; charging disabled until real Stripe configuration is approved |
+| Administration | Role-protected user, subscription, usage and authentication-activity overview | Read-only console deployed; indexed directory and access-control tests pass |
 
-The `/login/` and `/register/` pages are frontend previews. There is no account service or protected workspace yet; the forms do not send or save credentials.
+The `/login/`, `/register/`, `/verify-email/` and `/forgot-password/` flows use Amazon
+Cognito when configured. The workspace and application APIs require a signed Cognito
+session in deployed environments. The infrastructure template provisions the user pool,
+public web client and durable DynamoDB profiles/task history; optional Google federation requires a
+separate Google OAuth client and is off by default.
 
 Documents and document Research work without an API key. They use real source text, **not embeddings or language-model synthesis**. Default Coding mode is `demo`: its answer is a fixed connection-test fixture, not generated code. Live provider errors never silently fall back to that fixture.
 
-[PROJECT_STATUS.md](PROJECT_STATUS.md) is the current handoff source of truth. See [verification scope](docs/STATUS.md), the [local demo guide](DEMO_GUIDE.md) and [pitch](PITCH.md).
+**Maturity: authenticated staging / production-hardening in progress.** Authentication,
+request controls, durable profiles/history, per-user document isolation and atomic
+per-user model quotas are deployed and smoke-tested on the published AWS environment.
+Registration/email verification and bounded Bedrock calls are verified. A restore drill
+and remaining production controls are still required.
+[PROJECT_STATUS.md](PROJECT_STATUS.md) is the source of truth.
+
+Documentation set:
+
+- [PRODUCTION_AUDIT.md](docs/PRODUCTION_AUDIT.md) — findings, stub → production list, git workflow.
+- [ROADMAP.md](docs/ROADMAP.md) — Phases 0–10 with completion criteria and maturity definitions.
+- [ADRs](docs/adr/) — compute, database, authentication, vector store, async research.
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md), [DEVELOPMENT.md](DEVELOPMENT.md), [DEPLOYMENT.md](docs/DEPLOYMENT.md), [SECURITY.md](SECURITY.md), [OPERATIONS.md](OPERATIONS.md).
+- Hackathon-era notes: [docs/STATUS.md](docs/STATUS.md), [DEMO_GUIDE.md](DEMO_GUIDE.md), [PITCH.md](PITCH.md).
 
 ## Run locally
 
@@ -52,15 +71,35 @@ On macOS/Linux use `.venv/bin/python`, `cp` and `npm` equivalents. `docker compo
 
 ## Configuration and limits
 
-Backend `.env` controls `NEXUS_PROVIDER`, `DOCUMENT_ENABLED`, `AWS_REGION`, `BEDROCK_MODEL_ID`, `TAVILY_API_KEY`, `ALLOWED_ORIGINS` and optional local `DEMO_ACCESS_TOKEN`. The frontend only needs `NEXT_PUBLIC_API_BASE_URL`. Never put AWS/provider secrets in public frontend variables.
+Backend `.env` controls `APP_ENV`, model/search/document settings and Cognito identifiers;
+see `services/api/.env.example`. Staging and production refuse guest mode, missing Cognito
+or durable profile configuration, insecure origins, and unsafe provider configuration.
+Every response carries `X-Request-ID`, and `GET /ready` reports dependency checks. The
+frontend needs the API URL plus the public Cognito pool/client identifiers. Never put
+AWS/provider secrets in public frontend variables.
 
-Uploads accept PDF or UTF-8 TXT up to 5 MB, with PDFs capped at 30 pages. Extracted text and PDF decompression are additionally bounded. Documents live in one API process for up to one hour, at most ten documents, and disappear on restart. Each document requires its separate secret token for retrieval and deletion. There is no durable storage or multi-instance document support. Browser task history is memory-only; prompts are independent, not a conversation-memory system.
+Uploads accept PDF or UTF-8 TXT up to 5 MB, with PDFs capped at 30 pages. Extracted text and PDF decompression are additionally bounded. The deployed Lambda stores document evidence in private S3 with a one-day lifecycle; local development uses bounded process memory. Each document remains owner-scoped. Task history is stored per account in DynamoDB and bounded to 100 records; prompts are still independent, not a conversation-memory system.
 
-The supplied Lambda template sets `DOCUMENT_ENABLED=false` because this document store is not safe across separate Lambda instances. A full cloud document demo needs shared durable storage first. S3/vector environment placeholders are unused. No vector database, embeddings, OCR or generated-code execution is implemented.
+Authenticated Bedrock Coding is limited per account to 25 requests and 50,000 tokens per
+UTC day, and 250 requests and 500,000 tokens per UTC month. Request reservations are
+atomic across Lambda instances; exact provider token counts are recorded after successful
+responses. The account menu displays both periods and their reset times. Search and
+document retrieval do not consume this model allowance. These are safety limits, not a
+paid subscription or billing system. The integration branch now contains a Stripe billing
+foundation and `/settings/` experience, but live charging stays disabled until a real
+recurring Price, restricted secret key, webhook signing secret, portal policy, terms and
+refund policy are configured.
+
+The Lambda template stores documents in a private S3 bucket with one-day expiry so separate instances share them. No vector database, embeddings, OCR or generated-code execution is implemented; see the roadmap.
 
 ## Live services
 
-Follow [AWS setup](docs/AWS_SETUP.md). AWS CLI is installed on the originating workstation and the named profile `nexusai` has passed STS identity verification; the default profile is not signed in. This does not prove Bedrock inference. The configured model still needs a real invocation check. Set `AWS_PROFILE=nexusai` in the backend terminal when using that profile, then select `NEXUS_PROVIDER=bedrock` only after verification.
+Follow [AWS setup](docs/AWS_SETUP.md). The deployed Coding provider exposes verified
+APAC Amazon Nova Micro, Lite and Pro inference profiles through server-owned aliases.
+Automatic routing favors Micro for short/simple work, Lite for normal work and Pro for
+complex production/security/architecture prompts. Arbitrary model IDs are rejected.
+The configured $10 monthly budget and alarms remain active; the SNS email subscription
+must be confirmed by its recipient.
 
 `TAVILY_API_KEY` enables Search and web Research. Put it only in `services/api/.env`, then restart the API. Do not put it in `apps/web/.env.local`. On the canonical pair (`127.0.0.1:3000` → `127.0.0.1:8000`) Search is live when `/health` reports `capabilities.search: true`. Search asks Tavily for at most five basic results plus a provider summary, and lists only HTTP(S) URLs Tavily returned. It does not independently read or verify full source pages. Health reports configuration/capabilities, while each chat response labels its actual provider (`demo`, `bedrock`, `extractive` or `tavily`). Health alone never proves Bedrock access.
 
@@ -68,6 +107,7 @@ Follow [AWS setup](docs/AWS_SETUP.md). AWS CLI is installed on the originating w
 
 ```powershell
 Push-Location services/api
+..\..\.venv\Scripts\python.exe -m ruff check .
 ..\..\.venv\Scripts\python.exe -m pytest -q
 Pop-Location
 Push-Location apps/web

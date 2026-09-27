@@ -37,8 +37,9 @@ def check(settings: Settings, *, invoke: bool = False, session=None) -> dict:
         provider = CodingProvider(settings.model_copy(update={'nexus_provider': 'bedrock'}))
         for prompt in ('Write a Python function to reverse a string. Keep the answer short.',
                        'Write a JavaScript function to add two numbers. Keep the answer short.'):
-            answer = provider.generate(prompt)
-            checks.append({'step': 'Live inference', 'ok': True, 'prompt': prompt, 'answer': answer})
+            generation = provider.generate(prompt, max_tokens=300)
+            checks.append({'step': 'Live inference', 'ok': True, 'prompt': prompt,
+                           'answer': generation.text, 'usage': generation.usage()})
         report['ready'] = True
         return report
     except (BotoCoreError, ClientError, ProviderError) as exc:

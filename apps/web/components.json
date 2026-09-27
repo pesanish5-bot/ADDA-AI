@@ -1,0 +1,22 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "app/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib"
+  },
+  "registries": {
+    "@rare-ui": "https://rareui.com/r/{name}.json"
+  },
+  "notes": "ADDA uses plain CSS, not Tailwind. Fluid Orb from swamimalode07/rare-ui was adapted into components/ui/fluid-orb.tsx without a full shadcn/Tailwind install."
+}

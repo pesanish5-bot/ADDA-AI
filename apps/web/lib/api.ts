@@ -1,11 +1,50 @@
+import { getIdToken } from "./cognito";
+
 export type Provider = "demo" | "bedrock" | "extractive" | "tavily" | "local";
 export type Agent = "auto" | "coding" | "document" | "search" | "research";
-export type Health = { status: "ok"; provider: Provider; capabilities: Record<Exclude<Agent, "auto">, boolean>; limits?: Record<string, number> };
+export type ModelChoice = "auto" | "nova-micro" | "nova-lite" | "nova-pro";
+export type ModelOption = { id: ModelChoice; label: string; description: string };
+export type UsagePeriod = { window: string; requests: number; request_limit: number; input_tokens: number; output_tokens: number; tokens: number; token_limit: number; resets_at: string };
+export type UsageSummary = { daily: UsagePeriod; monthly: UsagePeriod };
+export type Profile = { id: string; email: string; display_name: string; status: string; is_admin: boolean; login_count: number; created_at?: string | null; last_login_at?: string | null };
+export type BillingInvoice = { id: string; number?: string | null; status: string; currency: string; amount_due: number; amount_paid: number; created: number; hosted_invoice_url?: string | null; invoice_pdf?: string | null };
+export type BillingSummary = {
+  configured: boolean;
+  plan: "free" | "pro";
+  status: string;
+  has_customer: boolean;
+  current_period_end?: number | null;
+  cancel_at_period_end: boolean;
+  entitlements: Record<string, number>;
+  invoices: BillingInvoice[];
+  pro_offer?: { amount: number; currency: string; interval: string } | null;
+};
+export type AdminUser = Profile & { plan: "free" | "pro"; subscription_status: string; monthly_requests: number; monthly_tokens: number };
+export type AdminEvent = { id: string | number; user_id?: string | null; event_type: string; success: boolean; created_at?: string | null };
+export type AdminOverview = { summary: { users: number; active_users: number; pro_users: number; logins: number }; users: AdminUser[]; events: AdminEvent[] };
+export type BillingReadiness = { status: "disabled" | "ready" | "degraded"; configured: boolean; secret_source: "none" | "local" | "aws_secrets_manager"; checks: { check: string; ok: boolean }[] };
+export type Health = {
+  status: "ok";
+  provider: Provider;
+  capabilities: Record<Exclude<Agent, "auto">, boolean>;
+  limits?: Record<string, number>;
+  auth?: { configured: boolean; provider: string; required: boolean };
+  models?: ModelOption[];
+};
 export type DocumentRef = { document_id: string; document_token: string; filename: string; pages: number; chunks: number };
 export type ChatResponse = {
   request_id: string; agent: string; answer: string; provider: Provider;
   activity: { step: string; status: "completed"; detail: string; duration_ms: number }[];
   citations: { id?: string; title?: string; url?: string; page?: number; excerpt?: string }[];
+  usage?: { provider: string; model: string; input_tokens?: number | null; output_tokens?: number | null; latency_ms: number; stop_reason?: string | null; truncated?: boolean; attempts?: number } | null;
+};
+export type TaskRecord = {
+  id: string;
+  prompt: string;
+  response: ChatResponse;
+  created_at: string;
+  updated_at: string;
+  archived: boolean;
 };
 const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 export class ApiError extends Error { constructor(message: string, public status: number) { super(message); this.name = "ApiError"; } }
@@ -13,13 +52,24 @@ function requestSignal(timeoutMs: number, extra?: AbortSignal) {
   const timeout = AbortSignal.timeout(timeoutMs);
   return extra && typeof AbortSignal.any === "function" ? AbortSignal.any([timeout, extra]) : timeout;
 }
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getIdToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 async function request<T>(path: string, timeoutMs: number, init?: RequestInit, extra?: AbortSignal): Promise<T> {
   try {
-    const response = await fetch(`${baseUrl}${path}`, { ...init, signal: requestSignal(timeoutMs, extra) });
+    const headers = {
+      ...(init?.headers || {}),
+      ...(await authHeaders()),
+    };
+    const response = await fetch(`${baseUrl}${path}`, { ...init, headers, signal: requestSignal(timeoutMs, extra) });
     let payload;
     try { payload = JSON.parse(await response.text()); }
     catch (error) { if (!(error instanceof SyntaxError)) throw error; throw new Error(`The API returned an unexpected response (${response.status}). Please check the API address.`); }
-    if (!response.ok) throw new ApiError(typeof payload?.detail?.message === "string" ? payload.detail.message : `The request could not be completed (${response.status}). Please try again.`, response.status);
+    if (!response.ok) {
+      if (response.status === 401) throw new ApiError("Sign in required.", 401);
+      throw new ApiError(typeof payload?.detail?.message === "string" ? payload.detail.message : `The request could not be completed (${response.status}). Please try again.`, response.status);
+    }
     return payload as T;
   } catch (error) {
     if (extra?.aborted) throw error;
@@ -28,24 +78,41 @@ async function request<T>(path: string, timeoutMs: number, init?: RequestInit, e
     throw error;
   }
 }
-const auth = (token: string): Record<string, string> => token ? { "X-Demo-Token": token } : {};
 export const getHealth = () => request<Health>("/health", 5_000);
-export const sendChat = (message: string, agent: Agent, token: string, document?: DocumentRef | null, signal?: AbortSignal) => request<ChatResponse>("/api/chat", 65_000, {
-  method: "POST", headers: { "Content-Type": "application/json", ...auth(token), ...(document ? { "X-Document-Token": document.document_token } : {}) },
-  body: JSON.stringify({ message, agent, ...(document ? { document_id: document.document_id } : {}) }),
+export const getUsage = () => request<UsageSummary>("/api/usage", 10_000);
+export const getProfile = () => request<Profile>("/api/auth/me", 10_000);
+export const getBilling = () => request<BillingSummary>("/api/billing", 15_000);
+export const startCheckout = () => request<{ url: string }>("/api/billing/checkout", 15_000, { method: "POST" });
+export const openBillingPortal = () => request<{ url: string }>("/api/billing/portal", 15_000, { method: "POST" });
+export const getAdminOverview = () => request<AdminOverview>("/api/admin/overview", 20_000);
+export const getBillingReadiness = () => request<BillingReadiness>("/api/admin/billing-readiness", 20_000);
+export const syncAuthProfile = (
+  event: "login" | "register" | "refresh" | "verify" | "password_reset" | "logout",
+  displayName = "",
+) => request("/api/auth/sync", 10_000, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ event, display_name: displayName }),
+});
+export const sendChat = (message: string, agent: Agent, model: ModelChoice, document?: DocumentRef | null, signal?: AbortSignal) => request<ChatResponse>("/api/chat", 65_000, {
+  method: "POST", headers: { "Content-Type": "application/json", ...(document ? { "X-Document-Token": document.document_token } : {}) },
+  body: JSON.stringify({ message, agent, model, ...(document ? { document_id: document.document_id } : {}) }),
 }, signal);
-export const uploadDocument = (file: File, token: string) => {
+export const listTasks = (archived = false) => request<TaskRecord[]>(`/api/tasks?archived=${archived}`, 10_000);
+export const archiveTask = (taskId: string) => request<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}/archive`, 10_000, { method: "POST" });
+export const restoreTask = (taskId: string) => request<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}/restore`, 10_000, { method: "POST" });
+export const removeTask = (taskId: string) => request<{ deleted: boolean }>(`/api/tasks/${encodeURIComponent(taskId)}`, 10_000, { method: "DELETE" });
+export const uploadDocument = (file: File) => {
   const body = new FormData(); body.append("file", file);
-  return request<DocumentRef>("/api/documents", 30_000, { method: "POST", headers: auth(token), body });
+  return request<DocumentRef>("/api/documents", 30_000, { method: "POST", body });
 };
-export const loadDemoDocument = (token: string) => request<DocumentRef>("/api/documents/demo", 15_000, { method: "POST", headers: auth(token) });
-export const deleteDocument = async (document: DocumentRef, token: string) => {
+export const loadDemoDocument = () => request<DocumentRef>("/api/documents/demo", 15_000, { method: "POST" });
+export const deleteDocument = async (document: DocumentRef) => {
   try {
     await request<{ deleted: boolean }>(`/api/documents/${encodeURIComponent(document.document_id)}`, 15_000, {
-      method: "DELETE", headers: { ...auth(token), "X-Document-Token": document.document_token },
+      method: "DELETE", headers: { "X-Document-Token": document.document_token },
     });
   } catch (error) {
-    // Expired or already removed documents require no further server cleanup.
     if (!(error instanceof ApiError && error.status === 404)) throw error;
   }
 };

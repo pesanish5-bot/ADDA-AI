@@ -1,57 +1,166 @@
-# NexusAI handoff
+# ADDA AI project status
 
-## Current goal
-Finish the professional frontend for the hackathon. User will handle deployment separately.
+**ADDA AI**. Live site: https://main.dvhyzvzxczywv.amplifyapp.com/
 
-## Authoritative working copy
-Use `outputs/nexusai-mvp`, branch `codex/hackathon-mvp`. The active frontend on
-localhost:3000 and API on 127.0.0.1:8000 run this copy. Original `outputs/nexusai`
-has older code but still supplies the Python venv and backend environment to the
-startup script. Do not overwrite either checkout or run simultaneous frontend edits.
+## Current focus
 
-## Current working state
-- Coding: working labelled fixture, real Bedrock inference unverified.
-- Documents: real PDF/TXT keyword retrieval, page citations, temporary token-protected uploads.
-- Research: plan, retrieve twice, assemble cited evidence; no model synthesis.
-- Search: Tavily key configured; current adapter requests a provider summary and sources.
-  Earlier Cursor notes report live Search success; this latest UI pass did not repeat paid calls.
-- AWS: named profile identity previously verified; no deployment or live Bedrock claim.
+Production Cognito authentication and durable task history are integrated with the
+Bedrock-hardening branch on `codex/auth-bedrock-integration`, preserving the workspace
+UI. Durable per-user Bedrock usage limits are also live. The protected AWS stack and
+Amplify frontend were updated on 2026-09-27; PR review/merge remains.
 
-## Completed this pass
-Audited both checkouts, running services, environment presence without showing secrets,
-Cursor's new startup script, Search summary behavior, frontend and demo notes.
-Replaced promotional dark UI with neutral light workspace, compact navigation,
-focused composer, result-first layout and a separate activity panel on desktop.
-Kept upload, citations, history, code highlighting/copy and existing API contracts.
-Removed external font request and decorative noise. Search badge says Enabled:
-configuration is not proof of a successful live request.
+Stripe billing and the dedicated Settings foundation are implemented, tested and deployed
+in fail-closed mode. Live billing intentionally remains disabled until real Stripe
+test/live configuration and commercial policies are supplied.
+The next activation layer now uses runtime AWS Secrets Manager retrieval instead of raw
+Stripe CloudFormation parameters and adds a protected, sanitized billing-readiness view.
 
-## Verified
-- Full backend suite: 71 passed (one existing dependency deprecation warning).
-- Final frontend typecheck and production build passed, including the result-first layout.
-- Browser: Coding fixture; sample PDF budget INR 180,000 cited page 2;
-  Research four-step workflow; mobile menu and history selection.
-- Desktop 1440px and mobile 390px checks, no horizontal overflow observed.
-- Browser error/warning log empty during this pass.
+A read-only admin console is deployed for `pesanish5@gmail.com`. It exposes bounded user,
+plan, usage and authentication-event summaries, never passwords, tokens, prompts or
+documents. Mutating account controls are deliberately not part of this first admin slice.
 
-## Files changed in this pass
-`apps/web/app/page.tsx`, `apps/web/app/globals.css`, this file, `docs/STATUS.md`.
-Pre-edit frontend copies saved under workspace `work/frontend-before-refinement-*`.
-No backend, credentials, startup settings, or deployment resources changed.
-Combined older Cursor/Codex changes are still uncommitted; authorship cannot be
-reconstructed precisely from one shared dirty tree. Do not attribute all changes to one tool.
+## Auth
 
-## Commands
-From MVP root: `../nexusai/.venv/Scripts/python.exe -m pytest services/api/tests -q`.
-From apps/web: `npm.cmd run typecheck`, `npm.cmd run build`.
-API: `../nexusai/.venv/Scripts/python.exe scripts/start_api.py`.
-Frontend: `npm.cmd run dev -- --hostname 127.0.0.1 --port 3000`.
+- Email register → `/verify-email` → login
+- Google via Cognito Hosted UI (optional; hidden unless the domain, IdP and explicit
+  frontend flag are configured)
+- Forgot password → `/forgot-password`
+- Workspace gated by `AuthGate`; every deployed application API requires a validated
+  Cognito JWT and checks disabled-account status
+- Registered users: Cognito Users console is source of truth
+- DynamoDB stores durable profiles, a maximum of 100 tasks per account and 90-day auth
+  audit events; document evidence is scoped to both Cognito subject and document token
 
-## Remaining / exact next action
-Review current frontend with user, then checkpoint the combined repository safely.
-Resolve dependency lock drift before clean-machine setup: pypdf and multipart are
-used by the app but previous lock files need checking. Do not assume a clean install
-works merely because the shared venv passes tests.
-Bedrock test approval remains pending. Deployment is user-owned for now.
-Documents use process memory and are disabled in the Lambda template.
-Local work stops when the PC sleeps. No background/cloud execution is established.
+## UI parity
+
+- Phase 1 (integrated on `codex/auth-bedrock-integration`):
+  provider hardened (token cap, timeout, bounded retry, truncation flag, usage metadata
+  in response and logs, 18 new tests → 107); template gained `BedrockMaxTokens`,
+  `AlertEmail`-gated SNS + AWS Budget + Lambda/Bedrock alarms, and a cross-region IAM
+  grant. Claude Haiku 4.5 reported entitled but denied actual inference. APAC Amazon Nova
+  Lite passed two bounded live calls (103 input tokens each; 65/111 output tokens) and is
+  deployed with a $10 monthly budget and API/Bedrock alarms.
+- Integration branch combines `feat/bedrock-coding` and `feat/production-auth`; it is
+  deployed and still needs PR review/merge.
+- Private task history now syncs across sessions, with Archive, restore and confirmed
+  permanent deletion. The activity panel shows model, token total, model time and retry
+  attempts when the provider returns usage metadata. Rare UI attribution and third-party
+  notices are included.
+- Coding now offers Automatic, Nova Micro, Nova Lite and Nova Pro. All three model tiers
+  passed two bounded live calls. The API resolves public aliases through a fixed allowlist;
+  clients cannot submit arbitrary Bedrock IDs. Clicking the ADDA AI logo performs a full
+  page refresh.
+- Bedrock Coding usage is isolated by Cognito subject and persisted in atomic DynamoDB
+  daily/monthly windows. The account menu shows requests, tokens and UTC reset times.
+  Current limits are 25 requests/50,000 tokens daily and 250 requests/500,000 tokens
+  monthly. Search, documents and extractive Research do not consume that allowance.
+- Stripe Checkout, customer portal, invoice summaries and signed webhook-driven Pro
+  entitlements are implemented. Exact Price matching and webhook replay protection prevent
+  the browser from granting access. `/settings/` contains Account, Plan & Usage and
+  Appearance; later categories are visibly marked planned.
+- Public pre-launch Privacy, Terms, Refunds and Acceptable Use pages are implemented and
+  linked from authentication, workspace, Settings and Admin surfaces. They disclose the
+  current providers and explicitly state that payments are not live. The temporary Gmail
+  contact is configurable with `NEXT_PUBLIC_SUPPORT_EMAIL` and must be replaced with the
+  verified business-domain address before commercial launch. These are operational drafts,
+  not legal review or approval of pricing/refund decisions.
+
+## Known Issues
+
+- Coding uses Bedrock (`apac.amazon.nova-lite-v1:0`). The SNS alarm subscription is pending
+  recipient confirmation at `pesanish5@gmail.com`.
+- Local-development documents in memory are capped at 10 globally; staging uses the
+  configured private S3 bucket.
+- Rate limiter is per process; Lambda instances do not share counts.
+- Exact token totals are available only after Bedrock replies, so one bounded response can
+  cross a token ceiling; the next model request is rejected. Request limits remain atomic.
+- Local venv is Python 3.14 while CI/deploy use 3.13.
+- `docker compose` build/run unverified. Frontend has no eslint.
+- The new Three.js component from `main` is present but is not mounted by a page yet;
+  integrate it with reduced-motion/lazy-loading controls or remove the unused module.
+
+## Security Issues
+
+- Resolved and deployed: fail-closed Cognito authentication and per-user document ownership.
+- Partially resolved: Stripe credentials now use runtime Secrets Manager retrieval. The
+  optional Tavily key and demo gate remain CloudFormation `NoEcho` parameters pending the
+  rest of Phase 6.
+- Medium: no CSP on the static site. Fix: Phase 7.
+- Details and strengths: `docs/PRODUCTION_AUDIT.md`, `SECURITY.md`.
+
+## Infrastructure
+
+- Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
+  (job 22 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  manual light/dark modes, five persistent accent choices, private history, Archive and
+  the verified model selector, daily/monthly account usage, `/settings/` and `/admin/`.
+  URL https://main.dvhyzvzxczywv.amplifyapp.com/
+- API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-27),
+  HTTP API `pqrxb30pg5`, Lambda Python 3.13, Cognito user pool, encrypted/PITR DynamoDB
+  profiles/task history and private S3 documents bucket (1-day lifecycle). Running integration branch
+  with `AppEnv=staging`, `Provider=bedrock`, APAC Nova Lite, `AUTH_REQUIRED=true`,
+  `DemoAccessToken=""`, durable usage limits and a $10 monthly budget.
+  Raw Stripe key parameters were removed; activation now accepts only an authorized
+  Secrets Manager ARN plus the non-secret Price ID. Billing remains disabled.
+  Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
+  Deploy path: `python scripts/build_lambda_package.py` → `aws cloudformation package`
+  → `aws cloudformation deploy` (see OPERATIONS.md). No Docker or SAM CLI needed.
+- Live verification after Settings/billing deploy: `/health` reports Cognito
+  configured/required and billing disabled; `/ready` → 200; anonymous billing → 401;
+  disabled webhook → 503; `/settings/` → 200 with production API, Plan & Usage, Checkout
+  and portal references in the served bundle. Anonymous history → 401;
+  root/login/register/recovery routes → 200. Published bundles contain the Archive,
+  history-sync, usage and attribution UI. Public Privacy, Terms, Refunds and Acceptable
+  Use routes return 200 and contain the expected pre-launch notices. Automated tests cover
+  cross-user task and quota isolation. A temporary live DynamoDB smoke record confirmed
+  atomic daily/monthly request and exact token accumulation and was then deleted. An
+  authenticated live usage/history/archive click-through and cross-user document smoke
+  test remain pending.
+- Admin verification: the role check has automated admin/non-admin/anonymous coverage;
+  the live API rejects anonymous access with 401; `entity-created-index` is active and
+  indexes the existing profile; `/admin/` returns 200 and its production bundle contains
+  the protected overview and billing-readiness endpoints, privacy copy and production API
+  origin. The admin route now verifies the server-returned `is_admin` role before rendering
+  or requesting console data; non-admin members are returned to the workspace. The API
+  independently enforces the same boundary. Authenticated admin browser click-through
+  remains pending.
+- Target architecture (ADRs 0001–0005): ECS Fargate, Postgres + pgvector, Cognito, SQS
+  worker. Nothing provisioned yet; all require approval (recurring cost).
+
+## Tests
+
+- Backend: `python -m pytest services/api/tests -q` → 144 passed (2026-09-27).
+- Lint: `ruff check .` clean. `pip-audit -r requirements.txt --strict`: no known
+  vulnerabilities.
+- Frontend: `npm run typecheck` and `npm run build` passed on the integration branch;
+  registration, verification, recovery, guarded workspace, history and Archive are in the
+  static build. The latest build also prerenders the four public policy routes.
+- CI passed API, web and SAM lint checks. Local SAM CLI is not installed. Live cloud
+  health/readiness, the three-model catalog, anonymous request rejection and public
+  route/bundle checks passed.
+
+## External Services
+
+- Amazon Bedrock: Nova Lite live inference verified locally and deployed; an authenticated
+  browser Coding request is the remaining end-to-end confirmation.
+- Tavily: key held in local `.env` and stack parameter; live Search verified earlier in
+  the hackathon phase, not re-run today.
+- AWS account: profile `nexusai`, region `ap-south-1`.
+
+## Latest Decisions
+
+- 2026-09-24: ADR-0001 ECS Fargate over Lambda (Phase 4); ADR-0002 Postgres + pgvector;
+  ADR-0003 Cognito; ADR-0004 pgvector hybrid retrieval; ADR-0005 SQS + worker for
+  research. Production refuses the demo fixture unless explicitly allowed. Git: `main`
+  protected, short-lived branches, squash merge, tags deploy.
+
+## Next Priority
+
+Run an authenticated browser usage/history/archive smoke test and the cross-user document
+isolation matrix, confirm the AWS SNS subscription email, then review/merge PR #6.
+Configure production SES before declaring production. The next product slice is graceful
+automatic-model fallback, followed by audited admin account controls. Before enabling
+Stripe or an approved alternative, approve the recurring price, quota economics, taxes,
+business identity, governing terms and final refund policy; payment credentials and those
+commercial decisions are not configured yet. Replace the temporary policy contact with a
+verified business-domain mailbox and obtain appropriate legal/tax review before charging.

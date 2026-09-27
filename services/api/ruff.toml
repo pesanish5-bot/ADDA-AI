@@ -1,0 +1,21 @@
+target-version = "py313"
+line-length = 120
+extend-exclude = [".aws-sam", "__pycache__"]
+
+[lint]
+# Correctness first; style rules stay off until the codebase is formatted in one pass.
+select = ["E", "F", "B", "I", "UP", "S", "PL"]
+ignore = [
+  "E501",    # line length: reviewers, not CI, decide
+  "PLR09",   # complexity counters are review hints, not CI failures
+  "PLR2004", # magic values in limits are documented inline
+  "S101",    # asserts are fine in tests
+  "B008",    # FastAPI Depends()/File() in defaults is the framework idiom
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["S", "PL"]
+"check_bedrock.py" = ["PL"]
+
+[lint.isort]
+known-first-party = ["app"]

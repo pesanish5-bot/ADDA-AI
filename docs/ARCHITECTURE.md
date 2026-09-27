@@ -32,11 +32,47 @@ Document limits: 5 MB upload, 30 PDF pages, 200,000 extracted characters, 300 ch
 
 Documents stay in process memory, expire after one hour, and are capped at ten. Restarting loses uploads. The UI keeps task history and document attachment state in memory, not durable conversation storage. Run one API process for the document demo.
 
-Health advertises configured capabilities and Coding provider; successful responses carry the actual provider. Neither the presence of a key nor a health response verifies a live service.
+Health advertises configured capabilities and Coding provider; successful responses carry the actual provider. Neither the presence of a key nor a health response verifies a live service. `GET /ready` performs dependency checks (bucket access, provider configuration) and returns 503 with the failing checks.
+
+### Request pipeline and API contract
+
+Middleware order (outermost first): `RequestContext` (request id, timing, JSON access log, security headers) → `RateLimit` (per-client, mutating `/api/*` only) → `BodyLimit` → CORS → routes. Every response carries `X-Request-ID`; clients may supply their own (8–64 chars `[A-Za-z0-9._-]`) for tracing.
+
+Errors share one shape: `{"detail": {"code", "message", "request_id"}}`. Codes are part of the contract:
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `invalid_request` | 422 | Schema violation (blank/oversized message, unknown field, bad agent) |
+| `request_too_large` | 413 | Body over 64 KB (chat) or 5 MB + 128 KB (upload) |
+| `unauthorized` | 401 | Demo token missing or wrong |
+| `rate_limited` | 429 | Per-client window exhausted; `Retry-After` header |
+| `documents_disabled` | 503 | Document storage off in this deployment |
+| `provider_unavailable`, `aws_*` | 502/503 | Upstream model/search failure; never falls back to the fixture |
+| `internal_error` | 500 | Unhandled exception; details only in logs under the request id |
+
+Startup guards (`Settings.validate_for_environment`): production refuses the demo fixture unless `ALLOW_DEMO_FIXTURE=true`, requires https origins and a Bedrock model id when `NEXUS_PROVIDER=bedrock`. Interactive docs are disabled in production.
+
+## TARGET — production architecture (ADRs 0001–0005)
+
+```mermaid
+flowchart LR
+  Browser[Static Next.js on Amplify/CloudFront] -- Cognito JWT --> ALB[ALB + WAF]
+  ALB --> API[FastAPI on ECS Fargate]
+  API --> PG[(Postgres + pgvector)]
+  API --> S3[(Private S3 documents)]
+  API --> SQS[SQS research jobs]
+  SQS --> Worker[Worker task, same image]
+  Worker --> PG
+  API --> Bedrock[Amazon Bedrock]
+  Worker --> Bedrock
+  API --> Tavily[Tavily]
+```
+
+Decisions and trade-offs live in `docs/adr/`; sequencing in `docs/ROADMAP.md`.
 
 ## NEXT — verify integrations and deploy an honest subset
 
-Verify two Bedrock requests with the named AWS profile, then verify Tavily if a key becomes available. Preserve the working no-key document path. SAM/Amplify configuration is prepared but not deployed or runtime-verified. Lambda explicitly disables documents because separate invocations cannot rely on a shared process store. Do not present the local document capability as a deployed Lambda capability.
+Verify two Bedrock requests with the named AWS profile when model access is available. Preserve the working no-key local document path. Amplify + SAM are deployed in `ap-south-1` (`adda-ai-demo`); the Lambda path stores extracted document evidence in a private one-day S3 bucket (`DOCUMENT_ENABLED=true`). Do not present semantic RAG or live Bedrock Coding as current capabilities.
 
 API Gateway HTTP API has a 30-second integration limit; the prepared Lambda budget is 28 seconds. Research currently performs two sequential lookups, so measure its complete latency before enabling it publicly. [AWS HTTP API quotas](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-quotas.html)
 
