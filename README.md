@@ -13,6 +13,7 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 | Search | Tavily adapter with bounded results, optional Tavily summary, and real source URLs | Live Search verified on the canonical local API when `TAVILY_API_KEY` is set |
 | AWS | Amplify + API Gateway/Lambda/Cognito/DynamoDB/S3 (`adda-ai-demo`, `ap-south-1`) | Authenticated staging deployed; Bedrock and $10 budget/alarms enabled |
 | Billing foundation | Stripe Checkout, customer portal, invoices, webhook-driven Pro entitlement and plan quotas | Deployed and tested fail-closed; charging disabled until real Stripe configuration is approved |
+| Administration | Role-protected user, subscription, usage and authentication-activity overview | Read-only console deployed; indexed directory and access-control tests pass |
 
 The `/login/`, `/register/`, `/verify-email/` and `/forgot-password/` flows use Amazon
 Cognito when configured. The workspace and application APIs require a signed Cognito

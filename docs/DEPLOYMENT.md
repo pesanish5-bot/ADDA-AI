@@ -8,7 +8,7 @@
 - Provider: `bedrock` for Coding using `apac.amazon.nova-lite-v1:0`. Search uses a backend-only Tavily key. Documents and
   Research use real extracted evidence. Cognito authentication is mandatory for workspace
   API routes; no shared demo token is configured.
-- Verified on the published revision (Amplify job 18): health/readiness, anonymous
+- Verified on the published revision (Amplify job 19): health/readiness, anonymous
   request 401, frontend root/login/register/recovery routes, adaptive appearance,
   Archive/history, daily/monthly usage UI, full-page logo refresh and the verified
   model-selector bundle. `/settings/` and its production billing endpoint references are
@@ -16,6 +16,9 @@
   Durable quota isolation and exact token accumulation were checked
   with automated tests and a temporary live DynamoDB record that was removed afterward.
   An authenticated live usage/history/archive click-through is still required.
+  The `/admin/` static route and production endpoint reference are published; anonymous
+  admin API access returns 401 and the DynamoDB admin index is active. A fresh
+  authenticated administrator click-through remains required.
 
 The static Next.js frontend can be hosted on AWS Amplify Hosting. The FastAPI backend runs in Lambda behind API Gateway HTTP API using the SAM template in `infra/template.yaml`. The backend's extracted PDF evidence is stored in a private S3 bucket with a one-day lifecycle rule. The bucket is retained if the stack is deleted, so remove it separately when retiring the demo.
 

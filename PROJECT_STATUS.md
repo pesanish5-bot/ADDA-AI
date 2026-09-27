@@ -13,6 +13,10 @@ Stripe billing and the dedicated Settings foundation are implemented, tested and
 in fail-closed mode. Live billing intentionally remains disabled until real Stripe
 test/live configuration and commercial policies are supplied.
 
+A read-only admin console is deployed for `pesanish5@gmail.com`. It exposes bounded user,
+plan, usage and authentication-event summaries, never passwords, tokens, prompts or
+documents. Mutating account controls are deliberately not part of this first admin slice.
+
 ## Auth
 
 - Email register → `/verify-email` → login
@@ -77,9 +81,9 @@ test/live configuration and commercial policies are supplied.
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (job 18 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  (job 19 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
   manual light/dark modes, five persistent accent choices, private history, Archive and
-  the verified model selector, daily/monthly account usage and `/settings/`.
+  the verified model selector, daily/monthly account usage, `/settings/` and `/admin/`.
   URL https://main.dvhyzvzxczywv.amplifyapp.com/
 - API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-27),
   HTTP API `pqrxb30pg5`, Lambda Python 3.13, Cognito user pool, encrypted/PITR DynamoDB
@@ -99,12 +103,17 @@ test/live configuration and commercial policies are supplied.
   atomic daily/monthly request and exact token accumulation and was then deleted. An
   authenticated live usage/history/archive click-through and cross-user document smoke
   test remain pending.
+- Admin verification: the role check has automated admin/non-admin/anonymous coverage;
+  the live API rejects anonymous access with 401; `entity-created-index` is active and
+  indexes the existing profile; `/admin/` returns 200 and its production bundle contains
+  the protected overview endpoint and privacy copy. Authenticated browser click-through
+  remains pending.
 - Target architecture (ADRs 0001–0005): ECS Fargate, Postgres + pgvector, Cognito, SQS
   worker. Nothing provisioned yet; all require approval (recurring cost).
 
 ## Tests
 
-- Backend: `python -m pytest services/api/tests -q` → 142 passed (2026-09-27).
+- Backend: `python -m pytest services/api/tests -q` → 144 passed (2026-09-27).
 - Lint: `ruff check .` clean. `pip-audit -r requirements.txt --strict`: no known
   vulnerabilities.
 - Frontend: `npm run typecheck` and `npm run build` passed on the integration branch;
@@ -134,6 +143,6 @@ test/live configuration and commercial policies are supplied.
 Run an authenticated browser usage/history/archive smoke test and the cross-user document
 isolation matrix, confirm the AWS SNS subscription email, then review/merge PR #6.
 Configure production SES before declaring production. The next product slice is graceful
-automatic-model fallback, followed by the role-protected admin console. Before enabling
+automatic-model fallback, followed by audited admin account controls. Before enabling
 Stripe, approve the recurring price, quota economics, taxes, terms and refund policy;
 payment credentials and those commercial decisions are not configured yet.
