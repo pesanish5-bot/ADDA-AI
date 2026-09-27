@@ -8,10 +8,12 @@
 - Provider: `bedrock` for Coding using `apac.amazon.nova-lite-v1:0`. Search uses a backend-only Tavily key. Documents and
   Research use real extracted evidence. Cognito authentication is mandatory for workspace
   API routes; no shared demo token is configured.
-- Verified on the published revision (Amplify job 17): health/readiness, anonymous
+- Verified on the published revision (Amplify job 18): health/readiness, anonymous
   request 401, frontend root/login/register/recovery routes, adaptive appearance,
   Archive/history, daily/monthly usage UI, full-page logo refresh and the verified
-  model-selector bundle. Durable quota isolation and exact token accumulation were checked
+  model-selector bundle. `/settings/` and its production billing endpoint references are
+  present; billing reports unconfigured and its webhook fails closed until activation.
+  Durable quota isolation and exact token accumulation were checked
   with automated tests and a temporary live DynamoDB record that was removed afterward.
   An authenticated live usage/history/archive click-through is still required.
 

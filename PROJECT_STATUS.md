@@ -9,9 +9,9 @@ Bedrock-hardening branch on `codex/auth-bedrock-integration`, preserving the wor
 UI. Durable per-user Bedrock usage limits are also live. The protected AWS stack and
 Amplify frontend were updated on 2026-09-27; PR review/merge remains.
 
-Stripe billing and the dedicated Settings foundation are implemented and tested on the
-branch but are not yet published. Live billing intentionally remains disabled until real
-Stripe test/live configuration and commercial policies are supplied.
+Stripe billing and the dedicated Settings foundation are implemented, tested and deployed
+in fail-closed mode. Live billing intentionally remains disabled until real Stripe
+test/live configuration and commercial policies are supplied.
 
 ## Auth
 
@@ -77,9 +77,9 @@ Stripe test/live configuration and commercial policies are supplied.
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (job 17 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  (job 18 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
   manual light/dark modes, five persistent accent choices, private history, Archive and
-  the verified model selector, plus daily/monthly account usage.
+  the verified model selector, daily/monthly account usage and `/settings/`.
   URL https://main.dvhyzvzxczywv.amplifyapp.com/
 - API: CloudFormation stack `adda-ai-demo` (UPDATE_COMPLETE 2026-09-27),
   HTTP API `pqrxb30pg5`, Lambda Python 3.13, Cognito user pool, encrypted/PITR DynamoDB
@@ -89,9 +89,12 @@ Stripe test/live configuration and commercial policies are supplied.
   Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
   Deploy path: `python scripts/build_lambda_package.py` → `aws cloudformation package`
   → `aws cloudformation deploy` (see OPERATIONS.md). No Docker or SAM CLI needed.
-- Live verification after quota deploy: `/health` reports Cognito configured/required;
-  `/ready` → 200; anonymous history → 401; live root/login/register/recovery → 200; deployed
-  bundles contain the Archive, history-sync, usage and attribution UI. Automated tests cover
+- Live verification after Settings/billing deploy: `/health` reports Cognito
+  configured/required and billing disabled; `/ready` → 200; anonymous billing → 401;
+  disabled webhook → 503; `/settings/` → 200 with production API, Plan & Usage, Checkout
+  and portal references in the served bundle. Anonymous history → 401;
+  root/login/register/recovery routes → 200. Published bundles contain the Archive,
+  history-sync, usage and attribution UI. Automated tests cover
   cross-user task and quota isolation. A temporary live DynamoDB smoke record confirmed
   atomic daily/monthly request and exact token accumulation and was then deleted. An
   authenticated live usage/history/archive click-through and cross-user document smoke
