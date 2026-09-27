@@ -136,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     async signOut() {
+      await syncAuthProfile("logout").catch(() => undefined);
       await cognitoSignOut();
       setUser(null);
     },

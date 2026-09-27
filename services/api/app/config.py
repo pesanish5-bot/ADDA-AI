@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     model_monthly_request_limit: int = 250
     model_daily_token_limit: int = 50_000
     model_monthly_token_limit: int = 500_000
+    pro_model_daily_request_limit: int = 100
+    pro_model_monthly_request_limit: int = 1_000
+    pro_model_daily_token_limit: int = 200_000
+    pro_model_monthly_token_limit: int = 2_000_000
 
     allowed_origins: str = 'http://localhost:3000,http://127.0.0.1:3000'
     demo_access_token: str = ''
@@ -52,6 +56,10 @@ class Settings(BaseSettings):
     auth_profiles_table: str = ''
     auth_dev_jwt_secret: str = ''
     admin_emails: str = ''
+    # Stripe Billing is off unless all three server-only values are configured.
+    stripe_secret_key: str = ''
+    stripe_webhook_secret: str = ''
+    stripe_pro_price_id: str = ''
     # Local development may opt out explicitly; staging/production must enable auth.
     auth_required: bool = False
 
@@ -86,6 +94,23 @@ class Settings(BaseSettings):
             'daily_tokens': self.model_daily_token_limit,
             'monthly_tokens': self.model_monthly_token_limit,
         }
+
+    @property
+    def pro_model_usage_limits(self) -> dict[str, int]:
+        return {
+            'daily_requests': self.pro_model_daily_request_limit,
+            'monthly_requests': self.pro_model_monthly_request_limit,
+            'daily_tokens': self.pro_model_daily_token_limit,
+            'monthly_tokens': self.pro_model_monthly_token_limit,
+        }
+
+    @property
+    def stripe_configured(self) -> bool:
+        return bool(
+            self.stripe_secret_key.strip()
+            and self.stripe_webhook_secret.strip()
+            and self.stripe_pro_price_id.strip()
+        )
 
     @property
     def cognito_pool_region(self) -> str:
@@ -135,10 +160,19 @@ class Settings(BaseSettings):
             problems.append('BEDROCK_MAX_ATTEMPTS must be between 1 and 3.')
         if any(value < 1 for value in self.model_usage_limits.values()):
             problems.append('All model usage limits must be positive.')
+        if any(value < 1 for value in self.pro_model_usage_limits.values()):
+            problems.append('All Pro model usage limits must be positive.')
         if self.model_monthly_request_limit < self.model_daily_request_limit:
             problems.append('MODEL_MONTHLY_REQUEST_LIMIT must be at least the daily limit.')
         if self.model_monthly_token_limit < self.model_daily_token_limit:
             problems.append('MODEL_MONTHLY_TOKEN_LIMIT must be at least the daily limit.')
+        if self.pro_model_monthly_request_limit < self.pro_model_daily_request_limit:
+            problems.append('PRO_MODEL_MONTHLY_REQUEST_LIMIT must be at least the daily limit.')
+        if self.pro_model_monthly_token_limit < self.pro_model_daily_token_limit:
+            problems.append('PRO_MODEL_MONTHLY_TOKEN_LIMIT must be at least the daily limit.')
+        stripe_values = [self.stripe_secret_key, self.stripe_webhook_secret, self.stripe_pro_price_id]
+        if any(value.strip() for value in stripe_values) and not all(value.strip() for value in stripe_values):
+            problems.append('Stripe billing requires STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_PRO_PRICE_ID together.')
         if self.app_env != 'development':
             insecure = [o for o in self.origins if not o.startswith('https://')]
             if insecure:

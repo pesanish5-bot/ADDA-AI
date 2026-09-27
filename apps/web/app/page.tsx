@@ -383,6 +383,7 @@ function Workspace() {
                 <small>{compactNumber(usageSummary.monthly.tokens)} / {compactNumber(usageSummary.monthly.token_limit)} tokens · resets {resetLabel(usageSummary.monthly.resets_at)}</small>
               </> : <small>{usageError ? "Usage is temporarily unavailable." : "Loading usage…"}</small>}
             </div>
+            <a className="account-menu-link" role="menuitem" href="/settings/">Settings</a>
             <button type="button" role="menuitem" onClick={() => void handleSignOut()}>Sign out</button>
           </div>
         )}

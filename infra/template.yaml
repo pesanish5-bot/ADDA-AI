@@ -56,6 +56,37 @@ Parameters:
     Type: Number
     Default: 500000
     MinValue: 1
+  ProModelDailyRequestLimit:
+    Type: Number
+    Default: 100
+    MinValue: 1
+  ProModelMonthlyRequestLimit:
+    Type: Number
+    Default: 1000
+    MinValue: 1
+  ProModelDailyTokenLimit:
+    Type: Number
+    Default: 200000
+    MinValue: 1
+  ProModelMonthlyTokenLimit:
+    Type: Number
+    Default: 2000000
+    MinValue: 1
+  StripeSecretKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Server-only Stripe secret key. Empty keeps paid billing disabled.
+  StripeWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Signing secret for the Stripe webhook endpoint.
+  StripeProPriceId:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^price_[A-Za-z0-9]+$'
+    Description: Stripe recurring Price ID for the ADDA AI Pro plan.
   AlertEmail:
     Type: String
     Default: ''
@@ -201,6 +232,13 @@ Resources:
           MODEL_MONTHLY_REQUEST_LIMIT: !Ref ModelMonthlyRequestLimit
           MODEL_DAILY_TOKEN_LIMIT: !Ref ModelDailyTokenLimit
           MODEL_MONTHLY_TOKEN_LIMIT: !Ref ModelMonthlyTokenLimit
+          PRO_MODEL_DAILY_REQUEST_LIMIT: !Ref ProModelDailyRequestLimit
+          PRO_MODEL_MONTHLY_REQUEST_LIMIT: !Ref ProModelMonthlyRequestLimit
+          PRO_MODEL_DAILY_TOKEN_LIMIT: !Ref ProModelDailyTokenLimit
+          PRO_MODEL_MONTHLY_TOKEN_LIMIT: !Ref ProModelMonthlyTokenLimit
+          STRIPE_SECRET_KEY: !Ref StripeSecretKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
+          STRIPE_PRO_PRICE_ID: !Ref StripeProPriceId
           ALLOWED_ORIGINS: !Ref FrontendOrigin
           DEMO_ACCESS_TOKEN: !Ref DemoAccessToken
           TAVILY_API_KEY: !Ref TavilyApiKey

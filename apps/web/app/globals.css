@@ -285,8 +285,8 @@ textarea { display: block; width: calc(100% - 36px); margin: 12px 18px; padding:
 .account-copy strong { font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-copy small { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-menu { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden; }
-.account-menu button { width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font-size: 12px; padding: 10px 12px; cursor: pointer; }
-.account-menu button:hover { background: var(--panel-2); color: var(--teal); }
+.account-menu button, .account-menu-link { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font-size: 12px; padding: 10px 12px; cursor: pointer; text-decoration: none; }
+.account-menu button:hover, .account-menu-link:hover { background: var(--panel-2); color: var(--teal); }
 .account-usage { display: grid; gap: 6px; padding: 12px; border-bottom: 1px solid var(--line); }
 .account-usage > strong { margin-bottom: 3px; font-size: 11px; }
 .account-usage small { color: var(--muted); font-size: 9px; }

@@ -14,13 +14,24 @@ from app.agents.s3_document import S3DocumentStore
 from app.auth.routes import create_auth_router
 from app.auth.service import AuthService
 from app.auth.tokens import verify_bearer_token
+from app.billing import (
+    BillingError,
+    BillingGateway,
+    BillingStore,
+    DynamoBillingStore,
+    MemoryBillingStore,
+    StripeGateway,
+    billing_summary,
+    process_stripe_event,
+    verify_stripe_event,
+)
 from app.body_limit import BodyLimit
 from app.config import Settings
 from app.graph import build_graph, select_agent
 from app.observability import RequestContext, annotate, configure_logging, current_request_id, log_event
 from app.providers import CodingProvider, ProviderError
 from app.ratelimit import RateLimit, RateLimiter
-from app.schemas import ChatRequest, ChatResponse, TaskRecord, UsageSummary
+from app.schemas import BillingRedirect, BillingSummary, ChatRequest, ChatResponse, TaskRecord, UsageSummary
 from app.task_store import DynamoTaskStore, MemoryTaskStore, TaskStore
 from app.usage_store import DynamoUsageStore, MemoryUsageStore, QuotaExceeded, UsageStore
 
@@ -41,6 +52,8 @@ def create_app(
     auth_service: AuthService | None = None,
     task_store: TaskStore | None = None,
     usage_store: UsageStore | None = None,
+    billing_store: BillingStore | None = None,
+    billing_gateway: BillingGateway | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
@@ -58,6 +71,18 @@ def create_app(
     metering = usage_store or (
         DynamoUsageStore(settings.auth_profiles_table, settings.cognito_pool_region)
         if settings.auth_profiles_table.strip() else MemoryUsageStore()
+    )
+    billing = billing_store or (
+        DynamoBillingStore(settings.auth_profiles_table, settings.cognito_pool_region)
+        if settings.stripe_configured and settings.auth_profiles_table.strip()
+        else MemoryBillingStore()
+    )
+    stripe = billing_gateway or (
+        StripeGateway(
+            settings.stripe_secret_key,
+            settings.origins[0],
+            settings.stripe_pro_price_id,
+        ) if settings.stripe_configured else None
     )
     app = FastAPI(title='ADDA AI API', version=settings.app_version,
                   docs_url=None if settings.is_production else '/docs',
@@ -84,6 +109,11 @@ def create_app(
     async def provider_error(request: Request, exc: ProviderError):
         annotate(error_code=exc.code)
         return _error(request, exc.status, exc.code, exc.message)
+
+    @app.exception_handler(BillingError)
+    async def billing_error(request: Request, exc: BillingError):
+        annotate(error_code=exc.code)
+        return _error(request, exc.status, exc.code, str(exc))
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, _exc: RequestValidationError):
@@ -155,6 +185,7 @@ def create_app(
                     ),
                     'required': settings.api_requires_auth,
                 },
+                'billing': {'configured': settings.stripe_configured, 'provider': 'stripe'},
                 'capabilities': {'coding': True, 'document': settings.document_enabled,
                                  'search': settings.search_enabled, 'research': settings.document_enabled or settings.search_enabled},
                 'limits': {'upload_bytes': MAX_BYTES, 'document_pages': 30, 'document_ttl_seconds': 3600},
@@ -220,13 +251,91 @@ def create_app(
             raise HTTPException(401, detail={'code': 'unauthorized', 'message': 'Sign in required.'})
         return user_id
 
+    def usage_limits(user_id: str) -> dict[str, int]:
+        record = billing.get(user_id)
+        summary = billing_summary(
+            record, settings.stripe_configured, settings.stripe_pro_price_id,
+            settings.model_usage_limits, settings.pro_model_usage_limits,
+        )
+        return summary['entitlements']
+
     @app.get('/api/tasks', response_model=list[TaskRecord])
     def list_tasks(archived: bool = False, claims: dict = Depends(authorize)):
         return tasks.list_tasks(task_owner(claims), archived=archived)
 
     @app.get('/api/usage', response_model=UsageSummary)
     def get_usage(claims: dict = Depends(authorize)):
-        return metering.get_usage(task_owner(claims), settings.model_usage_limits)
+        user_id = task_owner(claims)
+        return metering.get_usage(user_id, usage_limits(user_id))
+
+    @app.get('/api/billing', response_model=BillingSummary)
+    def get_billing(claims: dict = Depends(authorize)):
+        user_id = task_owner(claims)
+        record = billing.get(user_id)
+        invoices: list[dict] = []
+        pro_offer: dict | None = None
+        customer_id = str(record.get('customer_id') or '')
+        if stripe:
+            try:
+                pro_offer = stripe.get_pro_offer()
+                if customer_id:
+                    invoices = stripe.list_invoices(customer_id)
+            except BillingError as exc:
+                log_event('billing summary enrichment failed', logging.WARNING,
+                          exception=type(exc).__name__, user_id=user_id)
+        return billing_summary(
+            record, settings.stripe_configured, settings.stripe_pro_price_id,
+            settings.model_usage_limits, settings.pro_model_usage_limits, invoices, pro_offer,
+        )
+
+    @app.post('/api/billing/checkout', response_model=BillingRedirect)
+    def create_checkout(claims: dict = Depends(authorize)):
+        if not stripe:
+            raise BillingError(
+                'Paid plans are not available yet.', 'billing_not_configured', 503
+            )
+        user_id = task_owner(claims)
+        record = billing.get(user_id)
+        if billing_summary(
+            record, True, settings.stripe_pro_price_id,
+            settings.model_usage_limits, settings.pro_model_usage_limits,
+        )['plan'] == 'pro':
+            raise BillingError(
+                'Your Pro plan is already active. Use Manage billing instead.',
+                'subscription_exists', 409,
+            )
+        email = str(claims.get('email') or claims.get('cognito:username') or '')
+        return {'url': stripe.create_checkout(
+            user_id, email, str(record.get('customer_id') or '')
+        )}
+
+    @app.post('/api/billing/portal', response_model=BillingRedirect)
+    def create_billing_portal(claims: dict = Depends(authorize)):
+        if not stripe:
+            raise BillingError(
+                'Billing management is not available yet.', 'billing_not_configured', 503
+            )
+        record = billing.get(task_owner(claims))
+        customer_id = str(record.get('customer_id') or '')
+        if not customer_id:
+            raise BillingError(
+                'No billing account exists for this user.', 'billing_customer_missing', 409
+            )
+        return {'url': stripe.create_portal(customer_id)}
+
+    @app.post('/api/billing/webhook')
+    async def stripe_webhook(
+        request: Request, stripe_signature: str = Header(default='', alias='Stripe-Signature')
+    ):
+        if not settings.stripe_configured:
+            raise BillingError(
+                'Billing webhook is not configured.', 'billing_not_configured', 503
+            )
+        event = verify_stripe_event(
+            await request.body(), stripe_signature, settings.stripe_webhook_secret
+        )
+        processed = process_stripe_event(event, billing, settings.stripe_pro_price_id)
+        return {'received': True, 'processed': processed}
 
     @app.post('/api/tasks/{task_id}/archive', response_model=TaskRecord)
     def archive_task(task_id: str, claims: dict = Depends(authorize)):
@@ -263,7 +372,7 @@ def create_app(
         )
         if metered_request:
             try:
-                metering.begin_request(user_id, settings.model_usage_limits)
+                metering.begin_request(user_id, usage_limits(user_id))
             except QuotaExceeded as exc:
                 raise ProviderError(str(exc), 'usage_quota_exceeded', 429) from None
         annotate(route='chat', requested_agent=body.agent, requested_model=body.model,

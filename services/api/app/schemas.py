@@ -82,3 +82,31 @@ class UsagePeriod(BaseModel):
 class UsageSummary(BaseModel):
     daily: UsagePeriod
     monthly: UsagePeriod
+
+
+class BillingInvoice(BaseModel):
+    id: str
+    number: str | None = None
+    status: str
+    currency: str
+    amount_due: int
+    amount_paid: int
+    created: int
+    hosted_invoice_url: str | None = None
+    invoice_pdf: str | None = None
+
+
+class BillingSummary(BaseModel):
+    configured: bool
+    plan: Literal['free', 'pro']
+    status: str
+    has_customer: bool
+    current_period_end: int | None = None
+    cancel_at_period_end: bool = False
+    entitlements: dict[str, int]
+    invoices: list[BillingInvoice] = Field(default_factory=list)
+    pro_offer: dict[str, int | str] | None = None
+
+
+class BillingRedirect(BaseModel):
+    url: str

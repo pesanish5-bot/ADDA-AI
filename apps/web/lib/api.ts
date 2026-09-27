@@ -6,6 +6,19 @@ export type ModelChoice = "auto" | "nova-micro" | "nova-lite" | "nova-pro";
 export type ModelOption = { id: ModelChoice; label: string; description: string };
 export type UsagePeriod = { window: string; requests: number; request_limit: number; input_tokens: number; output_tokens: number; tokens: number; token_limit: number; resets_at: string };
 export type UsageSummary = { daily: UsagePeriod; monthly: UsagePeriod };
+export type Profile = { id: string; email: string; display_name: string; status: string; is_admin: boolean; login_count: number; created_at?: string | null; last_login_at?: string | null };
+export type BillingInvoice = { id: string; number?: string | null; status: string; currency: string; amount_due: number; amount_paid: number; created: number; hosted_invoice_url?: string | null; invoice_pdf?: string | null };
+export type BillingSummary = {
+  configured: boolean;
+  plan: "free" | "pro";
+  status: string;
+  has_customer: boolean;
+  current_period_end?: number | null;
+  cancel_at_period_end: boolean;
+  entitlements: Record<string, number>;
+  invoices: BillingInvoice[];
+  pro_offer?: { amount: number; currency: string; interval: string } | null;
+};
 export type Health = {
   status: "ok";
   provider: Provider;
@@ -63,8 +76,12 @@ async function request<T>(path: string, timeoutMs: number, init?: RequestInit, e
 }
 export const getHealth = () => request<Health>("/health", 5_000);
 export const getUsage = () => request<UsageSummary>("/api/usage", 10_000);
+export const getProfile = () => request<Profile>("/api/auth/me", 10_000);
+export const getBilling = () => request<BillingSummary>("/api/billing", 15_000);
+export const startCheckout = () => request<{ url: string }>("/api/billing/checkout", 15_000, { method: "POST" });
+export const openBillingPortal = () => request<{ url: string }>("/api/billing/portal", 15_000, { method: "POST" });
 export const syncAuthProfile = (
-  event: "login" | "register" | "refresh" | "verify" | "password_reset",
+  event: "login" | "register" | "refresh" | "verify" | "password_reset" | "logout",
   displayName = "",
 ) => request("/api/auth/sync", 10_000, {
   method: "POST",
