@@ -85,7 +85,7 @@ documents. Mutating account controls are deliberately not part of this first adm
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (job 19 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  (job 20 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
   manual light/dark modes, five persistent accent choices, private history, Archive and
   the verified model selector, daily/monthly account usage, `/settings/` and `/admin/`.
   URL https://main.dvhyzvzxczywv.amplifyapp.com/
@@ -94,6 +94,8 @@ documents. Mutating account controls are deliberately not part of this first adm
   profiles/task history and private S3 documents bucket (1-day lifecycle). Running integration branch
   with `AppEnv=staging`, `Provider=bedrock`, APAC Nova Lite, `AUTH_REQUIRED=true`,
   `DemoAccessToken=""`, durable usage limits and a $10 monthly budget.
+  Raw Stripe key parameters were removed; activation now accepts only an authorized
+  Secrets Manager ARN plus the non-secret Price ID. Billing remains disabled.
   Artifact bucket `adda-ai-artifacts-<account>-ap-south-1`.
   Deploy path: `python scripts/build_lambda_package.py` → `aws cloudformation package`
   → `aws cloudformation deploy` (see OPERATIONS.md). No Docker or SAM CLI needed.
@@ -110,8 +112,9 @@ documents. Mutating account controls are deliberately not part of this first adm
 - Admin verification: the role check has automated admin/non-admin/anonymous coverage;
   the live API rejects anonymous access with 401; `entity-created-index` is active and
   indexes the existing profile; `/admin/` returns 200 and its production bundle contains
-  the protected overview endpoint and privacy copy. Authenticated browser click-through
-  remains pending.
+  the protected overview and billing-readiness endpoints, privacy copy and production API
+  origin. Amplify job 20 published that UI. Authenticated browser click-through remains
+  pending.
 - Target architecture (ADRs 0001–0005): ECS Fargate, Postgres + pgvector, Cognito, SQS
   worker. Nothing provisioned yet; all require approval (recurring cost).
 
