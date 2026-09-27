@@ -5,6 +5,7 @@ import hljs from "highlight.js/lib/common";
 import ThemePicker from "../components/theme-picker";
 import WorkspaceOrb from "../components/ui/workspace-orb";
 import BrandMark from "../components/brand-mark";
+import LegalLinks from "../components/legal-links";
 import AuthGate from "../components/AuthGate";
 import { useAuth } from "../components/AuthProvider";
 import { ApiError, archiveTask, deleteDocument, getHealth, getUsage, listTasks, loadDemoDocument, removeTask, restoreTask, sendChat, uploadDocument, type Agent, type ChatResponse, type DocumentRef, type Health, type ModelChoice, type Provider, type TaskRecord, type UsageSummary } from "../lib/api";
@@ -459,7 +460,7 @@ function Workspace() {
             <div className="trace-note">{result ? labels[result.provider] : busy ? <button type="button" className="stop-button" onClick={stopTask}>Stop task</button> : "Waiting for the response"}</div>
           </aside>}
         </div>
-        <footer className="page-footer"><span>Tasks are private to your account and remain independent.</span><span><a href="https://rareui.com" target="_blank" rel="noopener noreferrer">Rare UI credit</a><button type="button" className="footer-auth" onClick={() => void handleSignOut()}>Sign out</button></span></footer>
+        <footer className="page-footer"><span>Tasks are private to your account and remain independent.</span><span><LegalLinks /><a href="https://rareui.com" target="_blank" rel="noopener noreferrer">Rare UI credit</a><button type="button" className="footer-auth" onClick={() => void handleSignOut()}>Sign out</button></span></footer>
       </div>
     </main>
   </div>;

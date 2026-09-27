@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import ThemePicker from "./theme-picker";
 import WorkspaceOrb from "./ui/workspace-orb";
 import BrandMark from "./brand-mark";
+import LegalLinks from "./legal-links";
 import { useAuth } from "./AuthProvider";
 import { PASSWORD_RULES } from "../lib/cognito";
 
@@ -152,6 +153,7 @@ export default function AuthView({ mode }: { mode: "login" | "register" }) {
         )}
       </div>
       <p className="auth-side-foot">Built for a transparent, evidence-led workflow.</p>
+      <LegalLinks className="auth-legal" />
     </section>
   </main>;
 }

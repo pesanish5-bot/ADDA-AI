@@ -58,6 +58,12 @@ documents. Mutating account controls are deliberately not part of this first adm
   entitlements are implemented. Exact Price matching and webhook replay protection prevent
   the browser from granting access. `/settings/` contains Account, Plan & Usage and
   Appearance; later categories are visibly marked planned.
+- Public pre-launch Privacy, Terms, Refunds and Acceptable Use pages are implemented and
+  linked from authentication, workspace, Settings and Admin surfaces. They disclose the
+  current providers and explicitly state that payments are not live. The temporary Gmail
+  contact is configurable with `NEXT_PUBLIC_SUPPORT_EMAIL` and must be replaced with the
+  verified business-domain address before commercial launch. These are operational drafts,
+  not legal review or approval of pricing/refund decisions.
 
 ## Known Issues
 
@@ -127,7 +133,7 @@ documents. Mutating account controls are deliberately not part of this first adm
   vulnerabilities.
 - Frontend: `npm run typecheck` and `npm run build` passed on the integration branch;
   registration, verification, recovery, guarded workspace, history and Archive are in the
-  static build.
+  static build. The latest build also prerenders the four public policy routes.
 - CI passed API, web and SAM lint checks. Local SAM CLI is not installed. Live cloud
   health/readiness, the three-model catalog, anonymous request rejection and public
   route/bundle checks passed.
@@ -153,5 +159,7 @@ Run an authenticated browser usage/history/archive smoke test and the cross-user
 isolation matrix, confirm the AWS SNS subscription email, then review/merge PR #6.
 Configure production SES before declaring production. The next product slice is graceful
 automatic-model fallback, followed by audited admin account controls. Before enabling
-Stripe, approve the recurring price, quota economics, taxes, terms and refund policy;
-payment credentials and those commercial decisions are not configured yet.
+Stripe or an approved alternative, approve the recurring price, quota economics, taxes,
+business identity, governing terms and final refund policy; payment credentials and those
+commercial decisions are not configured yet. Replace the temporary policy contact with a
+verified business-domain mailbox and obtain appropriate legal/tax review before charging.
