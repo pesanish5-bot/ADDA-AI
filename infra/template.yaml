@@ -87,6 +87,10 @@ Parameters:
     Default: ''
     AllowedPattern: '^$|^price_[A-Za-z0-9]+$'
     Description: Stripe recurring Price ID for the ADDA AI Pro plan.
+  AdminEmails:
+    Type: String
+    Default: ''
+    Description: Comma-separated administrator emails. Admin API still enforces Cognito authentication.
   AlertEmail:
     Type: String
     Default: ''
@@ -191,11 +195,24 @@ Resources:
           AttributeType: S
         - AttributeName: sk
           AttributeType: S
+        - AttributeName: entity_type
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
       KeySchema:
         - AttributeName: pk
           KeyType: HASH
         - AttributeName: sk
           KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: entity-created-index
+          KeySchema:
+            - AttributeName: entity_type
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
       SSESpecification:
@@ -239,6 +256,7 @@ Resources:
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
           STRIPE_PRO_PRICE_ID: !Ref StripeProPriceId
+          ADMIN_EMAILS: !Ref AdminEmails
           ALLOWED_ORIGINS: !Ref FrontendOrigin
           DEMO_ACCESS_TOKEN: !Ref DemoAccessToken
           TAVILY_API_KEY: !Ref TavilyApiKey
@@ -266,7 +284,9 @@ Resources:
                 - dynamodb:Query
                 - dynamodb:BatchWriteItem
                 - dynamodb:TransactWriteItems
-              Resource: !GetAtt AuthProfilesTable.Arn
+              Resource:
+                - !GetAtt AuthProfilesTable.Arn
+                - !Sub '${AuthProfilesTable.Arn}/index/*'
         - !If
           - UseBedrock
           - Statement:

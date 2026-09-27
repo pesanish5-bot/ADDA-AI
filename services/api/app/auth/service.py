@@ -51,6 +51,9 @@ class AuthService:
         if profile:
             if profile.get('status') == 'disabled':
                 raise PermissionError('Account disabled')
+            email = _claim_email(claims)
+            if email in self.settings.admin_email_set and not profile.get('is_admin'):
+                profile = self.store.upsert_profile(user_id, email=email, is_admin=True)
             return profile
         email = _claim_email(claims)
         profile = self.store.upsert_profile(

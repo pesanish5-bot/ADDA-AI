@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from mangum import Mangum
 
+from app.admin_store import AdminDirectory, DynamoAdminDirectory, MemoryAdminDirectory
 from app.agents.document import MAX_BYTES, DocumentStore
 from app.agents.s3_document import S3DocumentStore
 from app.auth.routes import create_auth_router
@@ -54,6 +55,7 @@ def create_app(
     usage_store: UsageStore | None = None,
     billing_store: BillingStore | None = None,
     billing_gateway: BillingGateway | None = None,
+    admin_directory: AdminDirectory | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
@@ -83,6 +85,11 @@ def create_app(
             settings.origins[0],
             settings.stripe_pro_price_id,
         ) if settings.stripe_configured else None
+    )
+    directory = admin_directory or (
+        DynamoAdminDirectory(settings.auth_profiles_table, settings.cognito_pool_region)
+        if settings.auth_profiles_table.strip()
+        else MemoryAdminDirectory(auth.store)  # type: ignore[arg-type]
     )
     app = FastAPI(title='ADDA AI API', version=settings.app_version,
                   docs_url=None if settings.is_production else '/docs',
@@ -258,6 +265,45 @@ def create_app(
             settings.model_usage_limits, settings.pro_model_usage_limits,
         )
         return summary['entitlements']
+
+    def require_admin(claims: dict = Depends(authorize)) -> dict:
+        profile = auth.me(claims)
+        if not profile.get('is_admin'):
+            raise HTTPException(403, detail={
+                'code': 'admin_required', 'message': 'Administrator access is required.',
+            })
+        return claims
+
+    @app.get('/api/admin/overview')
+    def admin_overview(_claims: dict = Depends(require_admin)):
+        users = directory.list_users()
+        enriched = []
+        for user in users:
+            user_id = str(user.get('id') or '')
+            record = billing.get(user_id)
+            plan = billing_summary(
+                record, settings.stripe_configured, settings.stripe_pro_price_id,
+                settings.model_usage_limits, settings.pro_model_usage_limits,
+            )
+            usage = metering.get_usage(user_id, plan['entitlements'])
+            enriched.append({
+                **user,
+                'plan': plan['plan'],
+                'subscription_status': plan['status'],
+                'monthly_requests': usage['monthly']['requests'],
+                'monthly_tokens': usage['monthly']['tokens'],
+            })
+        events = directory.list_auth_events()
+        return {
+            'summary': {
+                'users': len(enriched),
+                'active_users': sum(user.get('status') == 'active' for user in enriched),
+                'pro_users': sum(user.get('plan') == 'pro' for user in enriched),
+                'logins': sum(event.get('event_type') == 'login' and event.get('success') for event in events),
+            },
+            'users': enriched,
+            'events': events,
+        }
 
     @app.get('/api/tasks', response_model=list[TaskRecord])
     def list_tasks(archived: bool = False, claims: dict = Depends(authorize)):

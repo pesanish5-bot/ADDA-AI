@@ -19,6 +19,9 @@ export type BillingSummary = {
   invoices: BillingInvoice[];
   pro_offer?: { amount: number; currency: string; interval: string } | null;
 };
+export type AdminUser = Profile & { plan: "free" | "pro"; subscription_status: string; monthly_requests: number; monthly_tokens: number };
+export type AdminEvent = { id: string | number; user_id?: string | null; event_type: string; success: boolean; created_at?: string | null };
+export type AdminOverview = { summary: { users: number; active_users: number; pro_users: number; logins: number }; users: AdminUser[]; events: AdminEvent[] };
 export type Health = {
   status: "ok";
   provider: Provider;
@@ -80,6 +83,7 @@ export const getProfile = () => request<Profile>("/api/auth/me", 10_000);
 export const getBilling = () => request<BillingSummary>("/api/billing", 15_000);
 export const startCheckout = () => request<{ url: string }>("/api/billing/checkout", 15_000, { method: "POST" });
 export const openBillingPortal = () => request<{ url: string }>("/api/billing/portal", 15_000, { method: "POST" });
+export const getAdminOverview = () => request<AdminOverview>("/api/admin/overview", 20_000);
 export const syncAuthProfile = (
   event: "login" | "register" | "refresh" | "verify" | "password_reset" | "logout",
   displayName = "",

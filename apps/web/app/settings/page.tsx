@@ -128,6 +128,7 @@ function Settings() {
       <section id="integrations" className="settings-section"><div className="settings-heading"><div><h2>Integrations</h2><p>GitHub, Drive and other connections will require explicit per-service permission.</p></div><span className="roadmap-chip">Planned</span></div></section>
       <section id="privacy" className="settings-section"><div className="settings-heading"><div><h2>Data & privacy</h2><p>Export, retention and account deletion controls are the next privacy milestone.</p></div><span className="roadmap-chip">Planned</span></div></section>
       <section id="security" className="settings-section"><div className="settings-heading"><div><h2>Security</h2><p>Recent authentication activity and session revocation will appear here.</p></div><span className="roadmap-chip">Planned</span></div></section>
+      {profile?.is_admin && <section className="settings-section admin-entry"><div><h2>Administration</h2><p>Review accounts, subscription state, usage and authentication activity.</p></div><Link href="/admin/">Open admin console →</Link></section>}
     </main>
   </div>;
 }
