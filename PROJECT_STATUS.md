@@ -85,7 +85,7 @@ documents. Mutating account controls are deliberately not part of this first adm
 ## Infrastructure
 
 - Frontend: Amplify app `dvhyzvzxczywv`, branch `main`, `ap-south-1`, manual zip deploys
-  (job 20 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
+  (job 21 SUCCEED on 2026-09-27). The published UI includes adaptive device appearance,
   manual light/dark modes, five persistent accent choices, private history, Archive and
   the verified model selector, daily/monthly account usage, `/settings/` and `/admin/`.
   URL https://main.dvhyzvzxczywv.amplifyapp.com/
@@ -113,8 +113,10 @@ documents. Mutating account controls are deliberately not part of this first adm
   the live API rejects anonymous access with 401; `entity-created-index` is active and
   indexes the existing profile; `/admin/` returns 200 and its production bundle contains
   the protected overview and billing-readiness endpoints, privacy copy and production API
-  origin. Amplify job 20 published that UI. Authenticated browser click-through remains
-  pending.
+  origin. The admin route now verifies the server-returned `is_admin` role before rendering
+  or requesting console data; non-admin members are returned to the workspace. The API
+  independently enforces the same boundary. Authenticated admin browser click-through
+  remains pending.
 - Target architecture (ADRs 0001–0005): ECS Fargate, Postgres + pgvector, Cognito, SQS
   worker. Nothing provisioned yet; all require approval (recurring cost).
 
