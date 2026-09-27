@@ -64,6 +64,24 @@ starts below a token ceiling may cross it by at most that bounded request; the n
 is rejected with HTTP 429. Failed provider attempts retain their request reservation.
 Search, document retrieval and extractive Research are not counted as model usage.
 
+### Stripe subscriptions
+
+Billing is fail-closed and disabled unless `StripeSecretKey`, `StripeWebhookSecret` and
+`StripeProPriceId` are all supplied. Create one recurring Pro Price in Stripe, configure
+the Stripe customer portal, and register
+`POST https://<api-host>/api/billing/webhook` for at least
+`checkout.session.completed`, `customer.subscription.created`,
+`customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid` and
+`invoice.payment_failed`. Store secrets outside git and pass them only to the backend.
+
+Pro access is never granted by a browser redirect. The signed webhook must report an
+active or trialing subscription with the exact configured Price ID. Processed event IDs,
+customer ownership and subscription state are persisted in DynamoDB. The current Pro
+defaults are 100 requests/200,000 tokens per UTC day and 1,000 requests/2,000,000 tokens
+per UTC month; price these limits from measured Bedrock cost before enabling live mode.
+Test the complete lifecycle in Stripe test mode, including duplicate events, failed
+payments, portal cancellation and renewal, before adding live keys.
+
 The Lambda stores extracted chunks, not source PDFs. A document session requires the opaque document token returned by upload; S3 evidence expires after one day. The shared demo access token still permits any holder to call the API. Do not use this design for private multi-user accounts.
 
 ## Frontend

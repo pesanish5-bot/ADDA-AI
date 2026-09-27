@@ -12,6 +12,7 @@ A multi-agent workspace with visible routing, document evidence and a bounded Re
 | Research | LangGraph plan → two evidence checks → cited extractive brief | Attached-document workflow verified locally |
 | Search | Tavily adapter with bounded results, optional Tavily summary, and real source URLs | Live Search verified on the canonical local API when `TAVILY_API_KEY` is set |
 | AWS | Amplify + API Gateway/Lambda/Cognito/DynamoDB/S3 (`adda-ai-demo`, `ap-south-1`) | Authenticated staging deployed; Bedrock and $10 budget/alarms enabled |
+| Billing foundation | Stripe Checkout, customer portal, invoices, webhook-driven Pro entitlement and plan quotas | Security/contract tests pass; disabled until real Stripe configuration is approved |
 
 The `/login/`, `/register/`, `/verify-email/` and `/forgot-password/` flows use Amazon
 Cognito when configured. The workspace and application APIs require a signed Cognito
@@ -83,7 +84,10 @@ UTC day, and 250 requests and 500,000 tokens per UTC month. Request reservations
 atomic across Lambda instances; exact provider token counts are recorded after successful
 responses. The account menu displays both periods and their reset times. Search and
 document retrieval do not consume this model allowance. These are safety limits, not a
-paid subscription or billing system.
+paid subscription or billing system. The integration branch now contains a Stripe billing
+foundation and `/settings/` experience, but live charging stays disabled until a real
+recurring Price, restricted secret key, webhook signing secret, portal policy, terms and
+refund policy are configured.
 
 The Lambda template stores documents in a private S3 bucket with one-day expiry so separate instances share them. No vector database, embeddings, OCR or generated-code execution is implemented; see the roadmap.
 

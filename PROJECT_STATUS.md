@@ -9,6 +9,10 @@ Bedrock-hardening branch on `codex/auth-bedrock-integration`, preserving the wor
 UI. Durable per-user Bedrock usage limits are also live. The protected AWS stack and
 Amplify frontend were updated on 2026-09-27; PR review/merge remains.
 
+Stripe billing and the dedicated Settings foundation are implemented and tested on the
+branch but are not yet published. Live billing intentionally remains disabled until real
+Stripe test/live configuration and commercial policies are supplied.
+
 ## Auth
 
 - Email register → `/verify-email` → login
@@ -44,6 +48,10 @@ Amplify frontend were updated on 2026-09-27; PR review/merge remains.
   daily/monthly windows. The account menu shows requests, tokens and UTC reset times.
   Current limits are 25 requests/50,000 tokens daily and 250 requests/500,000 tokens
   monthly. Search, documents and extractive Research do not consume that allowance.
+- Stripe Checkout, customer portal, invoice summaries and signed webhook-driven Pro
+  entitlements are implemented. Exact Price matching and webhook replay protection prevent
+  the browser from granting access. `/settings/` contains Account, Plan & Usage and
+  Appearance; later categories are visibly marked planned.
 
 ## Known Issues
 
@@ -93,7 +101,7 @@ Amplify frontend were updated on 2026-09-27; PR review/merge remains.
 
 ## Tests
 
-- Backend: `python -m pytest services/api/tests -q` → 137 passed (2026-09-27).
+- Backend: `python -m pytest services/api/tests -q` → 142 passed (2026-09-27).
 - Lint: `ruff check .` clean. `pip-audit -r requirements.txt --strict`: no known
   vulnerabilities.
 - Frontend: `npm run typecheck` and `npm run build` passed on the integration branch;
@@ -123,5 +131,6 @@ Amplify frontend were updated on 2026-09-27; PR review/merge remains.
 Run an authenticated browser usage/history/archive smoke test and the cross-user document
 isolation matrix, confirm the AWS SNS subscription email, then review/merge PR #6.
 Configure production SES before declaring production. The next product slice is graceful
-automatic-model fallback and a carefully priced subscription design; payment processing,
-plan entitlements, invoices, refunds and legal terms are not implemented yet.
+automatic-model fallback, followed by the role-protected admin console. Before enabling
+Stripe, approve the recurring price, quota economics, taxes, terms and refund policy;
+payment credentials and those commercial decisions are not configured yet.
