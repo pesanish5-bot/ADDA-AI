@@ -1,7 +1,6 @@
 :root { --auth-story: #172a35; --auth-story-ink: #f4f9f8; --auth-story-accent: #91dbc0; }
 html[data-theme="dark"] { --auth-story: #0c2423; --auth-story-accent: #83d6b5; }
-html[data-theme="green"] { --auth-story: #184b35; --auth-story-accent: #b5efc8; }
-html[data-theme="blue"] { --auth-story: #173c69; --auth-story-accent: #b7dbff; }
+
 
 .auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(390px, .98fr) minmax(480px, 1.02fr); background: var(--bg); }
 .auth-story { background: var(--auth-story); color: var(--auth-story-ink); min-height: 100vh; padding: 38px clamp(36px, 5vw, 86px) 32px; display: flex; flex-direction: column; position: relative; overflow: hidden; }

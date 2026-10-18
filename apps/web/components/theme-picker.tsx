@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-type Theme = "light" | "dark" | "green" | "blue";
-const themes: Theme[] = ["light", "dark", "green", "blue"];
+type Theme = "light" | "dark";
+const themes: Theme[] = ["light", "dark"];
 
 export default function ThemePicker() {
   const [theme, setTheme] = useState<Theme>("light");
@@ -13,6 +13,9 @@ export default function ThemePicker() {
     if (themes.includes(saved as Theme)) {
       setTheme(saved as Theme);
       window.document.documentElement.dataset.theme = saved as Theme;
+    } else if (saved) {
+      // Clear stale theme values (e.g. previously saved "green" or "blue")
+      window.localStorage.removeItem("adda-theme");
     }
   }, []);
 
